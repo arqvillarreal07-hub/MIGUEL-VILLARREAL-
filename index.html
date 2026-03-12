@@ -1143,189 +1143,312 @@ function saveBit(){
 // FINANZAS
 // ══════════════════════════════════════
 function rFin(){
-  const totCob=DB.revenues.reduce((s,r)=>s+r.amount,0);
-  const totGast=DB.expenses.reduce((s,e)=>s+e.amount,0);
-  const act=DB.projects.filter(p=>p.status==='ACTIVO');
+  finRenderMovs();
+}
+
+// ── Helpers finanzas ─────────────────────────────────────────────────────────
+var _finFiltros = {tipo:'todos', pid:'', cat:'', q:''};
+
+function finRenderMovs(){
+  var f = _finFiltros;
+  // Merge ingresos y egresos
+  var movs = [];
+  DB.revenues.forEach(r=>{
+    movs.push({tipo:'ingreso', monto:r.amount, concepto:r.type,
+               pid:r.pid, cat:'Ingreso', sid:null, fecha:r.date, ref:r.ref||'', _id:r.id});
+  });
+  DB.expenses.forEach(e=>{
+    movs.push({tipo:'egreso', monto:e.amount, concepto:e.cat,
+               pid:e.pid, cat:e.cat, sid:e.sid, fecha:e.date, ref:'', _id:e.id});
+  });
+  // Filtrar
+  if(f.tipo !== 'todos') movs = movs.filter(m=>m.tipo===f.tipo);
+  if(f.pid)  movs = movs.filter(m=>m.pid===f.pid);
+  if(f.cat)  movs = movs.filter(m=>m.concepto===f.cat||m.cat===f.cat);
+  if(f.q)    movs = movs.filter(m=>(m.concepto+' '+(gP(m.pid)?gP(m.pid).name:'')).toLowerCase().includes(f.q.toLowerCase()));
+  // Ordenar más reciente primero
+  movs.sort((a,b)=>b.fecha.localeCompare(a.fecha));
+
+  var totI = DB.revenues.reduce((s,r)=>s+r.amount,0);
+  var totE = DB.expenses.reduce((s,e)=>s+e.amount,0);
+  var saldo = totI - totE;
+  var porCobrar = DB.projects.filter(p=>p.status==='ACTIVO').reduce((s,p)=>s+(p.cont-p.cob),0);
+
+  // Categorías únicas para filtro
+  var cats = [...new Set(DB.expenses.map(e=>e.cat))].sort();
+  var ingCats = [...new Set(DB.revenues.map(r=>r.type))].sort();
+
   $('MN').innerHTML=`
+  <!-- HEADER -->
   <div class="ph3">
-    <div><div class="pt">Finanzas por obra</div><div class="ps">Control de ingresos y egresos</div></div>
-    <div style="display:flex;gap:7px">
-      <button class="btn bg bsm" onclick="abrirDestajos()">📥 Subir destajos</button>
-      <button class="btn bo bsm" onclick="openNewRev()">+ Ingreso</button>
-      <button class="btn bp bsm" onclick="openNewExp()">+ Egreso</button>
+    <div><div class="pt">Finanzas</div><div class="ps">Ingresos y egresos del despacho</div></div>
+    <button class="btn bg bsm" onclick="abrirDestajos()">📥 Destajos</button>
+  </div>
+
+  <!-- KPIs -->
+  <div class="kg" style="grid-template-columns:repeat(4,1fr);margin-bottom:14px">
+    <div class="kc" style="cursor:pointer" onclick="finFiltrar('tipo','ingreso')">
+      <div class="kl">↑ Total ingresos</div>
+      <div class="kv grn">${fK(totI)}</div>
+    </div>
+    <div class="kc" style="cursor:pointer" onclick="finFiltrar('tipo','egreso')">
+      <div class="kl">↓ Total egresos</div>
+      <div class="kv amb">${fK(totE)}</div>
+    </div>
+    <div class="kc">
+      <div class="kl">Saldo neto</div>
+      <div class="kv ${saldo>=0?'grn':'rd'}">${fK(saldo)}</div>
+    </div>
+    <div class="kc">
+      <div class="kl">Por cobrar</div>
+      <div class="kv">${fK(porCobrar)}</div>
     </div>
   </div>
-  <div class="kg" style="grid-template-columns:repeat(4,1fr)">
-    <div class="kc"><div class="kl">Total ingresos</div><div class="kv grn">${fK(totCob)}</div></div>
-    <div class="kc"><div class="kl">Total egresos</div><div class="kv amb">${fK(totGast)}</div></div>
-    <div class="kc"><div class="kl">Saldo neto</div><div class="kv ${totCob>totGast?'grn':'rd'}">${fK(totCob-totGast)}</div></div>
-    <div class="kc"><div class="kl">Por cobrar</div><div class="kv">${fK(act.reduce((s,p)=>s+(p.cont-p.cob),0))}</div></div>
-  </div>
-  <div class="g2c">
-    <div class="card">
-      <div class="ch"><div class="ct">💰 Panel financiero por proyecto</div></div>
-      ${act.map(p=>{
-        const m=((p.cont-p.gast)/p.cont*100).toFixed(1);
-        const bg=Math.round(p.gast/(p.cont/1.16)*100);
-        return`<div style="border:1px solid var(--g2);border-radius:8px;padding:11px;margin-bottom:9px;cursor:pointer" onclick="opPD('${p.id}')">
-          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:7px">
-            <span style="font-size:13px;font-weight:700;color:var(--navy)">${p.name}</span>
-            <span class="sem ${sc(p.sem)}">${si(p.sem)}</span>
-          </div>
-          <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:7px;font-size:11px;text-align:center;margin-bottom:7px">
-            <div><div style="color:var(--g4)">Contratado</div><div style="font-weight:800;color:var(--navy)">${fK(p.cont)}</div></div>
-            <div><div style="color:var(--g4)">Cobrado</div><div style="font-weight:800;color:var(--green)">${fK(p.cob)}</div></div>
-            <div><div style="color:var(--g4)">Gastado</div><div style="font-weight:800;color:var(--amber)">${fK(p.gast)}</div></div>
-          </div>
-          <div class="pw"><div class="pb2 ${bg>100?'r':bg>85?'a':'g'}" style="width:${Math.min(bg,100)}%"></div></div>
-          <div style="display:flex;justify-content:space-between;font-size:11px;margin-top:3px">
-            <span style="color:var(--g4)">Gasto vs costo: ${bg}%</span>
-            <span style="font-weight:700;color:${parseFloat(m)>10?'var(--green)':'var(--red)'}">Margen: ${m}%</span>
-          </div>
-        </div>`;
-      }).join('')}
-    </div>
-    <div class="card">
-      <div class="ch"><div class="ct">📋 Movimientos</div></div>
-      <div class="tabs" style="margin-bottom:12px">
-        <button class="tab act" id="tc1" onclick="swTab('cob',this)">Ingresos</button>
-        <button class="tab" id="tc2" onclick="swTab('gas',this)">Egresos</button>
+
+  <!-- BARRA DE FILTROS -->
+  <div class="card" style="padding:12px 14px;margin-bottom:12px">
+    <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center">
+
+      <!-- Búsqueda -->
+      <div style="position:relative;flex:1;min-width:160px">
+        <span style="position:absolute;left:10px;top:50%;transform:translateY(-50%);color:var(--g4);font-size:14px">🔍</span>
+        <input id="fin_q" type="text" placeholder="Buscar..." value="${f.q}"
+          style="width:100%;padding:8px 10px 8px 30px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;outline:none"
+          oninput="_finFiltros.q=this.value;finRenderMovs()" onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--g2)'">
       </div>
-      <div id="tc_cob">${DB.revenues.slice().reverse().map(r=>{const p=gP(r.pid);return`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--g2)"><div><div style="font-size:13px;font-weight:600">${r.type}</div><div style="font-size:11px;color:var(--g4)">${(p&&p.name)} · ${r.date}</div></div><span class="amt g">${fmt(r.amount)}</span></div>`;}).join('')}</div>
-      <div id="tc_gas" style="display:none">${DB.expenses.slice().reverse().map(e=>{const p=gP(e.pid);const s=gS(e.sid);return`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--g2)"><div><div style="font-size:13px;font-weight:600">${e.cat}</div><div style="font-size:11px;color:var(--g4)">${(p&&p.name)} · ${(s&&s.name)}</div></div><span class="amt r">-${fmt(e.amount)}</span></div>`;}).join('')}</div>
+
+      <!-- Tipo -->
+      <div style="display:flex;gap:4px;background:var(--g1);border-radius:8px;padding:3px">
+        ${['todos','ingreso','egreso'].map(t=>`
+          <button onclick="finFiltrar('tipo','${t}')"
+            style="padding:6px 12px;border:none;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;transition:.15s;
+              background:${f.tipo===t?(t==='ingreso'?'var(--green)':t==='egreso'?'var(--red)':'var(--navy)'):'transparent'};
+              color:${f.tipo===t?'#fff':'var(--g4)'}">${t==='todos'?'Todos':t==='ingreso'?'↑ Ingresos':'↓ Egresos'}</button>
+        `).join('')}
+      </div>
+
+      <!-- Proyecto -->
+      <select style="padding:8px 10px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px;background:#fff;outline:none;min-width:120px"
+        onchange="finFiltrar('pid',this.value)">
+        <option value="">Todos los proyectos</option>
+        ${DB.projects.map(p=>`<option value="${p.id}" ${f.pid===p.id?'selected':''}>${p.name}</option>`).join('')}
+      </select>
+
+      <!-- Categoría -->
+      <select style="padding:8px 10px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px;background:#fff;outline:none;min-width:120px"
+        onchange="finFiltrar('cat',this.value)">
+        <option value="">Todas las categorías</option>
+        <optgroup label="Egresos">${cats.map(c=>`<option value="${c}" ${f.cat===c?'selected':''}>${c}</option>`).join('')}</optgroup>
+        <optgroup label="Ingresos">${ingCats.map(c=>`<option value="${c}" ${f.cat===c?'selected':''}>${c}</option>`).join('')}</optgroup>
+      </select>
+
+      <!-- Limpiar -->
+      ${(f.tipo!=='todos'||f.pid||f.cat||f.q)?`
+        <button onclick="finLimpiarFiltros()"
+          style="padding:8px 12px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px;color:var(--g4);cursor:pointer;background:#fff;font-weight:600">
+          ✕ Limpiar
+        </button>`:''
+      }
+
+      <!-- Acciones rápidas -->
+      <button onclick="finNuevoModal('ingreso')"
+        style="padding:8px 14px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;background:var(--gbg);color:var(--green)">
+        + Ingreso
+      </button>
+      <button onclick="finNuevoModal('egreso')"
+        style="padding:8px 14px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;background:var(--rbg);color:var(--red)">
+        + Egreso
+      </button>
     </div>
+  </div>
+
+  <!-- TABLA DE MOVIMIENTOS -->
+  <div class="card" style="padding:0;overflow:hidden">
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--g2)">
+      <div style="font-size:13px;font-weight:700;color:var(--navy)">${movs.length} movimientos</div>
+      <div style="font-size:12px;color:var(--g4)">
+        Suma filtrada: <strong style="color:var(--navy)">${fK(movs.reduce((s,m)=>s+(m.tipo==='ingreso'?m.monto:-m.monto),0))}</strong>
+      </div>
+    </div>
+    ${movs.length===0?`
+      <div style="text-align:center;padding:48px;color:var(--g4)">
+        <div style="font-size:32px;margin-bottom:10px">🔍</div>
+        <div style="font-weight:700">Sin resultados</div>
+        <div style="font-size:13px;margin-top:4px">Ajusta los filtros o registra un movimiento</div>
+      </div>`:
+    `<div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px">
+        <thead>
+          <tr style="background:var(--g1);font-size:11px;color:var(--g4);text-transform:uppercase;letter-spacing:.5px">
+            <th style="padding:9px 14px;text-align:left;font-weight:700">Fecha</th>
+            <th style="padding:9px 14px;text-align:left;font-weight:700">Concepto</th>
+            <th style="padding:9px 14px;text-align:left;font-weight:700">Proyecto</th>
+            <th style="padding:9px 14px;text-align:left;font-weight:700">Categoría</th>
+            <th style="padding:9px 14px;text-align:right;font-weight:700">Monto</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${movs.map(m=>{
+            var p=gP(m.pid);
+            var s=gS(m.sid);
+            return`<tr style="border-bottom:1px solid var(--g2);transition:.1s" onmouseover="this.style.background='var(--g1)'" onmouseout="this.style.background=''">
+              <td style="padding:10px 14px;color:var(--g4);white-space:nowrap">${m.fecha}</td>
+              <td style="padding:10px 14px">
+                <div style="font-weight:600;color:var(--navy)">${m.concepto}</div>
+                ${s?`<div style="font-size:11px;color:var(--g4)">${s.name}</div>`:''}
+              </td>
+              <td style="padding:10px 14px;color:var(--g5)">${p?p.name:'<span style="color:var(--g3)">—</span>'}</td>
+              <td style="padding:10px 14px">
+                <span style="padding:3px 8px;border-radius:99px;font-size:11px;font-weight:600;
+                  background:${m.tipo==='ingreso'?'var(--gbg)':'var(--rbg)'};
+                  color:${m.tipo==='ingreso'?'var(--green)':'var(--red)'}">
+                  ${m.tipo==='ingreso'?'↑':'↓'} ${m.cat}
+                </span>
+              </td>
+              <td style="padding:10px 14px;text-align:right;font-weight:800;
+                color:${m.tipo==='ingreso'?'var(--green)':'var(--red)'}">
+                ${m.tipo==='ingreso'?'+':'-'}${fmt(m.monto)}
+              </td>
+            </tr>`;
+          }).join('')}
+        </tbody>
+      </table>
+    </div>`}
   </div>`;
 }
-function swTab(t,btn){
-  ['cob','gas'].forEach(x=>{const el=$('tc_'+x);if(el)el.style.display=x===t?'block':'none'});
-  btn.closest('.tabs').querySelectorAll('.tab').forEach(el=>el.classList.toggle('act',el===btn));
+
+function finFiltrar(key, val){
+  _finFiltros[key] = val;
+  finRenderMovs();
 }
-function openNewRev(){
-  om('Registrar ingreso',`
-    <div class="fg"><div class="fl">Proyecto *</div><select class="fsl" id="nr_p">${DB.projects.filter(p=>p.status==='ACTIVO').map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>
-    <div class="fr2">
-      <div class="fg"><div class="fl">Tipo</div><select class="fsl" id="nr_t"><option>Anticipo</option><option>Estimación 1</option><option>Estimación 2</option><option>Estimación 3</option><option>Saldo final</option><option>Extra</option></select></div>
-      <div class="fg"><div class="fl">Monto *</div><input class="fi" id="nr_a" type="number" placeholder="0"></div>
-    </div>
-    <div class="fr2">
-      <div class="fg"><div class="fl">Fecha</div><input class="fi" id="nr_d" type="date" value="${today()}"></div>
-      <div class="fg"><div class="fl">Referencia</div><input class="fi" id="nr_r" placeholder="TRF-000"></div>
-    </div>`,
-    `<button class="btn bo" onclick="cm()">Cancelar</button><button class="btn bgreen" onclick="saveRev()">Registrar ingreso</button>`
-  );
+
+function finLimpiarFiltros(){
+  _finFiltros = {tipo:'todos', pid:'', cat:'', q:''};
+  finRenderMovs();
 }
-function saveRev(){
-  const a=parseInt($('nr_a').value)||0;if(!a){alert('Ingresa el monto');return}
-  DB.revenues.push({id:DB.revenues.length+1,pid:$('nr_p').value,type:$('nr_t').value,amount:a,date:$('nr_d').value,ref:$('nr_r').value});
-  cm();rFin();toast('✅ Ingreso registrado');
-}
-function openNewExp(){
-  om('Registrar egreso',`
-    <div class="fg"><div class="fl">Proyecto *</div><select class="fsl" id="ne_p">${DB.projects.filter(function(p){return p.status==='ACTIVO'}).map(function(p){return'<option value="'+p.id+'">'+p.name+'</option>'}).join('')}</select></div>
-    <div class="fr2">
-      <div class="fg"><div class="fl">Categoría</div><select class="fsl" id="ne_c"><option>Mano de obra</option><option>Materiales</option><option>Renta equipo</option><option>Transporte</option><option>Servicios</option><option>Otros</option></select></div>
-      <div class="fg">
-        <div class="fl">Proveedor</div>
-        <div style="position:relative">
-          <input class="fi" id="ne_s_txt" placeholder="Escribe o busca proveedor..." autocomplete="off" oninput="filtrarProv(this.value)" onfocus="filtrarProv(this.value)" style="width:100%">
-          <div id="ne_s_drop" style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;background:#fff;border:1.5px solid var(--navy);border-radius:8px;z-index:300;max-height:180px;overflow-y:auto;box-shadow:var(--shm)"></div>
+
+function finNuevoModal(tipo){
+  var isIng = tipo==='ingreso';
+  var cats = isIng
+    ? ['Anticipo','Estimación','Finiquito','Renta','Honorarios','Venta','Extra','Otro']
+    : ['Nómina','Mano de obra','Materiales','Herramienta','Transporte','Servicio externo','Honorarios','Destajos','Gastos varios'];
+
+  var chipsHtml = `<div style="display:flex;flex-wrap:wrap;gap:5px;margin-bottom:4px">${
+    cats.map(cat=>`<button type="button" onclick="finChipSel(this,'${cat}','fn_cat')"
+      style="padding:5px 10px;border:1.5px solid ${isIng?'var(--green)':'var(--red)'};border-radius:99px;
+             font-size:11px;font-weight:600;color:${isIng?'var(--green)':'var(--red)'};background:#fff;cursor:pointer">${cat}</button>`
+    ).join('')
+  }</div>`;
+
+  var provHtml = !isIng ? `
+    <div class="fg"><div class="fl">Proveedor</div>
+      <div style="position:relative">
+        <input class="fi" id="fn_prov_txt" placeholder="Buscar proveedor..." oninput="finBuscaProv(this.value)" autocomplete="off" style="width:100%">
+        <div id="fn_prov_drop" style="display:none;position:absolute;top:calc(100% + 2px);left:0;right:0;background:#fff;border:1.5px solid var(--navy);border-radius:8px;z-index:300;max-height:160px;overflow-y:auto;box-shadow:var(--shm)"></div>
+      </div>
+      <input type="hidden" id="fn_prov_id">
+    </div>` : '';
+
+  om((isIng?'↑ Nuevo ingreso':'↓ Nuevo egreso'),`
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <!-- Chips rápidos -->
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--g4);margin-bottom:6px">CATEGORÍA RÁPIDA</div>
+        ${chipsHtml}
+        <input class="fi" id="fn_cat" placeholder="O escribe el concepto..." style="margin-top:6px">
+      </div>
+      <div class="g2c">
+        <div class="fg"><div class="fl">Monto *</div>
+          <input class="fi" id="fn_monto" type="number" placeholder="0" autofocus
+            style="font-size:18px;font-weight:800;color:${isIng?'var(--green)':'var(--red)'}">
         </div>
-        <input type="hidden" id="ne_s_id" value="">
-        <div id="ne_s_nuevo" style="display:none;margin-top:6px;background:var(--gbg);border-radius:7px;padding:8px 10px;font-size:12px;color:var(--green)">
-          ✅ Se creará como nuevo proveedor al guardar
+        <div class="fg"><div class="fl">Fecha</div>
+          <input class="fi" id="fn_fecha" type="date" value="${today()}">
         </div>
       </div>
-    </div>
-    <div class="fr2">
-      <div class="fg"><div class="fl">Monto *</div><input class="fi" id="ne_a" type="number" placeholder="0"></div>
-      <div class="fg"><div class="fl">Fecha</div><input class="fi" id="ne_d" type="date" value="${today()}"></div>
+      <div class="fg"><div class="fl">Proyecto</div>
+        <select class="fsl" id="fn_pid">
+          <option value="">— Sin vincular —</option>
+          ${DB.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}
+        </select>
+      </div>
+      ${provHtml}
+      <div class="fg"><div class="fl">Referencia / nota</div>
+        <input class="fi" id="fn_ref" placeholder="TRF-001, factura, nota...">
+      </div>
     </div>`,
-    `<button class="btn bo" onclick="cm()">Cancelar</button><button class="btn bp" onclick="saveExp()">Registrar egreso</button>`
+    `<button class="btn bo" onclick="cm()">Cancelar</button>
+     <button class="btn ${isIng?'bgreen':'bp'}" onclick="finGuardarNuevo('${tipo}')">
+       ${isIng?'✅ Registrar ingreso':'✅ Registrar egreso'}
+     </button>`
   );
-  // Close dropdown when clicking outside
-  setTimeout(function(){
-    document.addEventListener('click', function cerrarDrop(e){
-      if(!e.target.closest('#ne_s_txt') && !e.target.closest('#ne_s_drop')){
-        var d=$('ne_s_drop');if(d)d.style.display='none';
-        document.removeEventListener('click', cerrarDrop);
-      }
-    });
-  }, 100);
+  setTimeout(()=>{ var m=$('fn_monto'); if(m) m.focus(); }, 200);
 }
-function filtrarProv(q){
-  var drop=$('ne_s_drop');
-  var nuevo=$('ne_s_nuevo');
-  var hidId=$('ne_s_id');
-  if(!drop)return;
+
+function finChipSel(btn, cat, inputId){
+  document.getElementById(inputId).value = cat;
+  btn.closest('div').querySelectorAll('button').forEach(b=>b.style.fontWeight='600');
+  btn.style.fontWeight='900'; btn.style.boxShadow='0 0 0 2px currentColor';
+}
+
+function finBuscaProv(q){
+  var drop=$('fn_prov_drop');
+  if(!drop) return;
   q=(q||'').trim();
-  var matches=DB.suppliers.filter(function(s){
-    return s.name.toLowerCase().indexOf(q.toLowerCase())>=0;
-  });
-  if(!q){drop.style.display='none';return;}
-  var html='';
-  matches.forEach(function(s){
-    html+='<div onclick="selProv('+s.id+',\''+s.name.replace(/'/g,"\\'")+'\')" style="padding:9px 13px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--g2)" onmouseover="this.style.background=\'var(--g1)\'" onmouseout="this.style.background=\'#fff\'">'+
-      '<div style="font-weight:600">'+s.name+'</div>'+
-      '<div style="font-size:11px;color:var(--g4)">'+s.cat+'</div></div>';
-  });
-  // Option to create new
-  var exactMatch=DB.suppliers.some(function(s){return s.name.toLowerCase()===q.toLowerCase()});
-  if(!exactMatch){
-    html+='<div onclick="selProvNuevo(\''+q.replace(/'/g,"\\'")+'\')" style="padding:9px 13px;cursor:pointer;font-size:13px;background:var(--gbg);color:var(--green);font-weight:600" onmouseover="this.style.opacity=\'.8\'" onmouseout="this.style.opacity=\'1\'">'+
-      '➕ Crear proveedor "'+q+'"</div>';
-  }
+  if(!q){ drop.style.display='none'; return; }
+  var matches=DB.suppliers.filter(s=>s.name.toLowerCase().includes(q.toLowerCase()));
+  var exacto=DB.suppliers.some(s=>s.name.toLowerCase()===q.toLowerCase());
+  var html=matches.map(s=>`<div onclick="finSelProv(${s.id},'${s.name.replace(/'/g,"\\'")}')"
+    style="padding:9px 13px;cursor:pointer;font-size:13px;border-bottom:1px solid var(--g2)"
+    onmouseover="this.style.background='var(--g1)'" onmouseout="this.style.background=''">
+    <div style="font-weight:600">${s.name}</div>
+    <div style="font-size:11px;color:var(--g4)">${s.cat}</div></div>`).join('');
+  if(!exacto) html+=`<div onclick="finSelProv('nuevo:${q}','${q}')"
+    style="padding:9px 13px;cursor:pointer;font-size:13px;background:var(--gbg);color:var(--green);font-weight:600">
+    ➕ Crear "${q}"</div>`;
   drop.innerHTML=html;
-  drop.style.display=matches.length>0||!exactMatch?'block':'none';
-  // Reset id if text changed manually
-  if(hidId&&hidId.value){
-    var cur=DB.suppliers.find(function(s){return s.id===parseInt(hidId.value)});
-    if(!cur||cur.name.toLowerCase()!==q.toLowerCase()) hidId.value='';
-  }
-  if(nuevo) nuevo.style.display='none';
+  drop.style.display='block';
 }
-function selProv(id,name){
-  var txt=$('ne_s_txt');var hidId=$('ne_s_id');var drop=$('ne_s_drop');var nuevo=$('ne_s_nuevo');
-  if(txt)txt.value=name;
-  if(hidId)hidId.value=id;
-  if(drop)drop.style.display='none';
-  if(nuevo)nuevo.style.display='none';
+
+function finSelProv(id, name){
+  var inp=$('fn_prov_txt'); var hid=$('fn_prov_id'); var drop=$('fn_prov_drop');
+  if(inp) inp.value=name; if(hid) hid.value=id; if(drop) drop.style.display='none';
 }
-function selProvNuevo(name){
-  var txt=$('ne_s_txt');var hidId=$('ne_s_id');var drop=$('ne_s_drop');var nuevo=$('ne_s_nuevo');
-  if(txt)txt.value=name;
-  if(hidId)hidId.value='nuevo:'+name;
-  if(drop)drop.style.display='none';
-  if(nuevo)nuevo.style.display='block';
-}
-function saveExp(){
-  var a=parseInt($('ne_a').value)||0;if(!a){alert('Ingresa el monto');return}
-  var sidRaw=$('ne_s_id').value;
-  var nombreProv=($('ne_s_txt').value||'').trim()||'Sin proveedor';
-  var sid=0;
-  if(sidRaw && sidRaw.indexOf('nuevo:')===0){
-    // Create new supplier on the fly
-    var newName=sidRaw.substring(6);
-    var cat=$('ne_c').value==='Mano de obra'?'Mano de obra':'Materiales';
-    sid=DB.suppliers.length+1;
-    DB.suppliers.push({id:sid,name:newName,cat:cat,contact:'—',phone:'—',email:'—',rating:3,terms:'Por definir',total:0});
-    toast('✅ Proveedor "'+newName+'" creado automáticamente');
-  } else if(sidRaw && parseInt(sidRaw)>0){
-    sid=parseInt(sidRaw);
-  } else if(nombreProv && nombreProv!=='Sin proveedor'){
-    // Text entered but no selection — try to match
-    var match=DB.suppliers.find(function(s){return s.name.toLowerCase()===nombreProv.toLowerCase()});
-    if(match){
-      sid=match.id;
-    } else {
-      // Create anyway
+
+function finGuardarNuevo(tipo){
+  var monto=parseFloat($('fn_monto').value)||0;
+  var cat=($('fn_cat').value||'').trim();
+  var pid=$('fn_pid').value;
+  var fecha=$('fn_fecha').value||today();
+  var ref=($('fn_ref')?$('fn_ref').value:'');
+  if(!monto){ toast('⚠️ Ingresa el monto'); $('fn_monto').focus(); return; }
+  if(!cat){ toast('⚠️ Elige o escribe el concepto'); $('fn_cat').focus(); return; }
+
+  if(tipo==='ingreso'){
+    DB.revenues.push({id:DB.revenues.length+1,pid,type:cat,amount:monto,date:fecha,ref});
+    var p=gP(pid); if(p) p.cob=(p.cob||0)+monto;
+  } else {
+    var sid=0;
+    var provId=$('fn_prov_id')?$('fn_prov_id').value:'';
+    if(provId && provId.indexOf('nuevo:')===0){
+      var nNom=provId.substring(6);
       sid=DB.suppliers.length+1;
-      DB.suppliers.push({id:sid,name:nombreProv,cat:'Otros',contact:'—',phone:'—',email:'—',rating:3,terms:'Por definir',total:0});
-      toast('✅ Proveedor "'+nombreProv+'" creado automáticamente');
+      DB.suppliers.push({id:sid,name:nNom,cat:'Otros',contact:'—',phone:'—',email:'—',rating:3,terms:'Por definir',total:0});
+      toast('✅ Proveedor "'+nNom+'" creado');
+    } else if(parseInt(provId)>0){
+      sid=parseInt(provId);
     }
+    DB.expenses.push({id:DB.expenses.length+1,pid,cat,sid,amount:monto,date:fecha});
+    var p=gP(pid); if(p) p.gast=(p.gast||0)+monto;
   }
-  DB.expenses.push({id:DB.expenses.length+1,pid:$('ne_p').value,cat:$('ne_c').value,sid:sid,amount:a,date:$('ne_d').value});
-  cm();rFin();toast('✅ Egreso registrado');
+  cm();
+  finRenderMovs();
+  toast('✅ '+( tipo==='ingreso'?'Ingreso':'Egreso' )+' registrado');
 }
+
+// ── Compatibilidad con funciones antiguas referenciadas desde FAB ─────────────
+function openNewRev(){ finNuevoModal('ingreso'); }
+function openNewExp(){ finNuevoModal('egreso'); }
 
 // ══════════════════════════════════════
 // COMPRAS
