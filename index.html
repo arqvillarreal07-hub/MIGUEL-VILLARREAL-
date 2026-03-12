@@ -434,6 +434,7 @@ const DB={
     {id:8,pid:'CAR-JAL-01',type:'Anticipo',amount:625000,date:'2025-02-05',ref:'TRF-027'},
     {id:9,pid:'BEL-EXT-01',type:'Total',amount:380000,date:'2025-01-20',ref:'TRF-028'},
   ],
+  destajos:[],
   expenses:[
     {id:1,pid:'CF-OBR-01',cat:'Mano de obra',sid:3,amount:580000,date:'2025-02-28'},
     {id:2,pid:'CF-OBR-01',cat:'Materiales',sid:1,amount:420000,date:'2025-02-20'},
@@ -544,13 +545,51 @@ function loginOK(){
   $('AV').textContent=DB.user.ini;
   $('AV').style.background=DB.user.col;
   $('UN').textContent=DB.user.name.split(' ')[0];
-  goTo('dashboard');
+  var startPage = canSee('dashboard') ? 'dashboard' : (PERMISOS[DB.user.id]||[])[0]||'proyectos';
+  goTo(startPage);
+  aplicarPermisos();
   setTimeout(updateProyBadge,100);
 }
-function logout(){DB.user=null;pin='';udots();$('LS').style.display='flex';$('app').classList.remove('v')}
+function logout(){DB.user=null;pin='';udots();$('LS').style.display='flex';$('app').classList.remove('v');document.querySelectorAll('.nv[data-p]').forEach(el=>el.style.display='');}
+
+// ═══════════════ PERMISOS POR ROL ═══════════════
+const PERMISOS = {
+  1: ['dashboard','crm','proyectos','cotizaciones','planproyecto','obras','bitacora','proyeccion',
+      'finanzas','compras','proveedores','partidas','cotizador','caja','documentos','portal',
+      'estadocuenta','destajos'],                                           // Miguel — todo
+  2: ['proyectos','cotizaciones','planproyecto','obras','bitacora',
+      'cotizador','documentos','portal'],                                   // Alejandro — Proyectos
+  3: ['obras','bitacora','proyectos','proyeccion','partidas',
+      'compras','documentos','caja'],                                        // Luis — Construcción
+  4: ['dashboard','crm','proyectos','finanzas','estadocuenta',
+      'compras','proveedores','caja','documentos'],                          // Administración
+};
+
+function canSee(page){
+  if(!DB.user) return false;
+  var perms = PERMISOS[DB.user.id];
+  return perms ? perms.includes(page) : false;
+}
+
+function aplicarPermisos(){
+  document.querySelectorAll('.nv[data-p]').forEach(el=>{
+    var p = el.dataset.p;
+    el.style.display = canSee(p) ? '' : 'none';
+  });
+  // Ocultar secciones del sidebar que quedaron vacías
+  document.querySelectorAll('.sbsec').forEach(sec=>{
+    var visibles = [...sec.querySelectorAll('.nv[data-p]')].filter(el=>el.style.display!=='none');
+    sec.style.display = visibles.length ? '' : 'none';
+  });
+}
 
 // ═══════════════ NAV ═══════════════
 function goTo(page){
+  // Bloquear acceso directo a páginas no permitidas
+  if(DB.user && !canSee(page)){
+    toast('⛔ Sin acceso a esta sección');
+    return;
+  }
   document.querySelectorAll('.nv').forEach(el=>el.classList.toggle('act',el.dataset.p===page));
   $('MN').innerHTML='';
   const map={dashboard:rDash,crm:rCRM,proyectos:rProj,cotizaciones:rCots,obras:rObras,bitacora:rBit,proyeccion:rProyeccion,finanzas:rFin,compras:rComp,proveedores:rProv,partidas:rPartidas,cotizador:rCotizador,caja:rCaja,documentos:rDocs,portal:rPortal,estadocuenta:rEstadoCuenta,planproyecto:rPlanProyecto};
@@ -1059,15 +1098,16 @@ function rFin(){
   const act=DB.projects.filter(p=>p.status==='ACTIVO');
   $('MN').innerHTML=`
   <div class="ph3">
-    <div><div class="pt">Finanzas por obra</div><div class="ps">Control de cobros y gastos</div></div>
+    <div><div class="pt">Finanzas por obra</div><div class="ps">Control de ingresos y egresos</div></div>
     <div style="display:flex;gap:7px">
-      <button class="btn bo bsm" onclick="openNewRev()">+ Cobro</button>
-      <button class="btn bp bsm" onclick="openNewExp()">+ Gasto</button>
+      <button class="btn bg bsm" onclick="abrirDestajos()">📥 Subir destajos</button>
+      <button class="btn bo bsm" onclick="openNewRev()">+ Ingreso</button>
+      <button class="btn bp bsm" onclick="openNewExp()">+ Egreso</button>
     </div>
   </div>
   <div class="kg" style="grid-template-columns:repeat(4,1fr)">
-    <div class="kc"><div class="kl">Total cobrado</div><div class="kv grn">${fK(totCob)}</div></div>
-    <div class="kc"><div class="kl">Total gastado</div><div class="kv amb">${fK(totGast)}</div></div>
+    <div class="kc"><div class="kl">Total ingresos</div><div class="kv grn">${fK(totCob)}</div></div>
+    <div class="kc"><div class="kl">Total egresos</div><div class="kv amb">${fK(totGast)}</div></div>
     <div class="kc"><div class="kl">Saldo neto</div><div class="kv ${totCob>totGast?'grn':'rd'}">${fK(totCob-totGast)}</div></div>
     <div class="kc"><div class="kl">Por cobrar</div><div class="kv">${fK(act.reduce((s,p)=>s+(p.cont-p.cob),0))}</div></div>
   </div>
@@ -1098,8 +1138,8 @@ function rFin(){
     <div class="card">
       <div class="ch"><div class="ct">📋 Movimientos</div></div>
       <div class="tabs" style="margin-bottom:12px">
-        <button class="tab act" id="tc1" onclick="swTab('cob',this)">Cobros</button>
-        <button class="tab" id="tc2" onclick="swTab('gas',this)">Gastos</button>
+        <button class="tab act" id="tc1" onclick="swTab('cob',this)">Ingresos</button>
+        <button class="tab" id="tc2" onclick="swTab('gas',this)">Egresos</button>
       </div>
       <div id="tc_cob">${DB.revenues.slice().reverse().map(r=>{const p=gP(r.pid);return`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--g2)"><div><div style="font-size:13px;font-weight:600">${r.type}</div><div style="font-size:11px;color:var(--g4)">${(p&&p.name)} · ${r.date}</div></div><span class="amt g">${fmt(r.amount)}</span></div>`;}).join('')}</div>
       <div id="tc_gas" style="display:none">${DB.expenses.slice().reverse().map(e=>{const p=gP(e.pid);const s=gS(e.sid);return`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--g2)"><div><div style="font-size:13px;font-weight:600">${e.cat}</div><div style="font-size:11px;color:var(--g4)">${(p&&p.name)} · ${(s&&s.name)}</div></div><span class="amt r">-${fmt(e.amount)}</span></div>`;}).join('')}</div>
@@ -1111,7 +1151,7 @@ function swTab(t,btn){
   btn.closest('.tabs').querySelectorAll('.tab').forEach(el=>el.classList.toggle('act',el===btn));
 }
 function openNewRev(){
-  om('Registrar cobro',`
+  om('Registrar ingreso',`
     <div class="fg"><div class="fl">Proyecto *</div><select class="fsl" id="nr_p">${DB.projects.filter(p=>p.status==='ACTIVO').map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}</select></div>
     <div class="fr2">
       <div class="fg"><div class="fl">Tipo</div><select class="fsl" id="nr_t"><option>Anticipo</option><option>Estimación 1</option><option>Estimación 2</option><option>Estimación 3</option><option>Saldo final</option><option>Extra</option></select></div>
@@ -1121,16 +1161,16 @@ function openNewRev(){
       <div class="fg"><div class="fl">Fecha</div><input class="fi" id="nr_d" type="date" value="${today()}"></div>
       <div class="fg"><div class="fl">Referencia</div><input class="fi" id="nr_r" placeholder="TRF-000"></div>
     </div>`,
-    `<button class="btn bo" onclick="cm()">Cancelar</button><button class="btn bgreen" onclick="saveRev()">Registrar cobro</button>`
+    `<button class="btn bo" onclick="cm()">Cancelar</button><button class="btn bgreen" onclick="saveRev()">Registrar ingreso</button>`
   );
 }
 function saveRev(){
   const a=parseInt($('nr_a').value)||0;if(!a){alert('Ingresa el monto');return}
   DB.revenues.push({id:DB.revenues.length+1,pid:$('nr_p').value,type:$('nr_t').value,amount:a,date:$('nr_d').value,ref:$('nr_r').value});
-  cm();rFin();toast('✅ Cobro registrado');
+  cm();rFin();toast('✅ Ingreso registrado');
 }
 function openNewExp(){
-  om('Registrar gasto',`
+  om('Registrar egreso',`
     <div class="fg"><div class="fl">Proyecto *</div><select class="fsl" id="ne_p">${DB.projects.filter(function(p){return p.status==='ACTIVO'}).map(function(p){return'<option value="'+p.id+'">'+p.name+'</option>'}).join('')}</select></div>
     <div class="fr2">
       <div class="fg"><div class="fl">Categoría</div><select class="fsl" id="ne_c"><option>Mano de obra</option><option>Materiales</option><option>Renta equipo</option><option>Transporte</option><option>Servicios</option><option>Otros</option></select></div>
@@ -1150,7 +1190,7 @@ function openNewExp(){
       <div class="fg"><div class="fl">Monto *</div><input class="fi" id="ne_a" type="number" placeholder="0"></div>
       <div class="fg"><div class="fl">Fecha</div><input class="fi" id="ne_d" type="date" value="${today()}"></div>
     </div>`,
-    `<button class="btn bo" onclick="cm()">Cancelar</button><button class="btn bp" onclick="saveExp()">Registrar gasto</button>`
+    `<button class="btn bo" onclick="cm()">Cancelar</button><button class="btn bp" onclick="saveExp()">Registrar egreso</button>`
   );
   // Close dropdown when clicking outside
   setTimeout(function(){
@@ -1234,7 +1274,7 @@ function saveExp(){
     }
   }
   DB.expenses.push({id:DB.expenses.length+1,pid:$('ne_p').value,cat:$('ne_c').value,sid:sid,amount:a,date:$('ne_d').value});
-  cm();rFin();toast('✅ Gasto registrado');
+  cm();rFin();toast('✅ Egreso registrado');
 }
 
 // ══════════════════════════════════════
@@ -3235,6 +3275,228 @@ function ppGuardarNueva(pid) {
 }
 </script>
 <!-- ═══════════════ FIN PLAN DE PROYECTO ═══════════════ -->
+
+
+<!-- ═══════════════ DESTAJOS ═══════════════ -->
+<script>
+var djParsed = []; // filas parseadas antes de confirmar
+
+// ─── MACHOTE ──────────────────────────────────────────────────────────────────
+const MACHOTE_DESTAJO = `OBRA: CABALÍA
+SEMANA: 10 al 14 mar
+
+Juan Pérez - Albañilería - 2500
+Carlos López - Herrería - 1800
+Pedro Martínez - Ayudante - 1200
+Roberto García - Acabados - 2000`;
+
+function abrirDestajos() {
+  djParsed = [];
+  om('📥 Subir destajos de la semana',
+    `<div style="display:flex;flex-direction:column;gap:14px">
+
+      <!-- MACHOTE COPIABLE -->
+      <div style="background:var(--navy);border-radius:10px;padding:14px;position:relative">
+        <div style="font-size:10px;font-weight:700;color:var(--gold);text-transform:uppercase;letter-spacing:.8px;margin-bottom:8px">📋 Machote — mándale esto a tu equipo</div>
+        <pre id="dj-machote" style="font-family:monospace;font-size:12px;color:#e8f0fe;line-height:1.7;white-space:pre-wrap;margin:0">${MACHOTE_DESTAJO}</pre>
+        <button onclick="djCopiarMachote()" style="position:absolute;top:10px;right:10px;background:var(--gold);border:none;border-radius:6px;padding:5px 10px;font-size:11px;font-weight:700;color:#fff;cursor:pointer">Copiar</button>
+      </div>
+
+      <!-- REGLAS DEL FORMATO -->
+      <div style="background:var(--bbg);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--blue);line-height:1.8">
+        <strong>Reglas del formato:</strong><br>
+        • Primera línea: <code>OBRA: [nombre o clave del proyecto]</code><br>
+        • Segunda línea: <code>SEMANA: [fechas]</code><br>
+        • Destajos: <code>Nombre - Rubro - Monto</code> (uno por línea)<br>
+        • El monto puede ser: <code>2500</code> · <code>2,500</code> · <code>$2,500</code><br>
+        • Las líneas en blanco se ignoran
+      </div>
+
+      <!-- TEXTAREA PEGAR -->
+      <div>
+        <div style="font-size:11px;font-weight:700;color:var(--g4);margin-bottom:6px">PEGA AQUÍ EL MENSAJE DEL CHAT</div>
+        <textarea id="dj-texto" rows="10" placeholder="Pega aquí el mensaje que te mandaron..." 
+          style="width:100%;padding:10px;border:1px solid var(--g2);border-radius:8px;font-size:13px;font-family:monospace;resize:vertical;line-height:1.6"
+          oninput="djParsear()"></textarea>
+      </div>
+
+      <!-- PREVIEW TABLA -->
+      <div id="dj-preview"></div>
+    </div>`,
+    `<button class="btn bo" onclick="cm()">Cancelar</button>
+     <button class="btn bp" id="dj-btn-guardar" style="display:none" onclick="djGuardar()">✅ Registrar destajos</button>`
+  );
+}
+
+function djCopiarMachote() {
+  navigator.clipboard.writeText(MACHOTE_DESTAJO).then(()=>toast('📋 Machote copiado — pégalo en el chat'));
+}
+
+function djParsear() {
+  var txt = document.getElementById('dj-texto').value;
+  var lineas = txt.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+
+  var obra = '', semana = '', filas = [];
+  var errores = [];
+
+  lineas.forEach((lin, i) => {
+    // Detectar OBRA:
+    if (/^obra:/i.test(lin)) {
+      obra = lin.replace(/^obra:\s*/i, '').trim();
+      return;
+    }
+    // Detectar SEMANA:
+    if (/^semana:/i.test(lin)) {
+      semana = lin.replace(/^semana:\s*/i, '').trim();
+      return;
+    }
+    // Líneas de destajo: separadas por - o | o tabulador o múltiples espacios
+    var partes = lin.split(/\s*[-|]\s*|\t/).map(p => p.trim()).filter(p => p.length > 0);
+
+    if (partes.length < 2) return; // línea no parseable, ignorar silencioso
+
+    // Buscar el monto (el que tiene número)
+    var monto = 0;
+    var montoIdx = -1;
+    partes.forEach((p, pi) => {
+      var n = parseFloat(p.replace(/[$,\s]/g, ''));
+      if (!isNaN(n) && n > 0 && montoIdx < 0) { monto = n; montoIdx = pi; }
+    });
+
+    if (monto === 0) { errores.push('Línea '+(i+1)+': no se encontró monto en "'+lin+'"'); return; }
+
+    var nombre = partes[0];
+    var rubro = partes.length >= 3 ? partes.filter((p,pi) => pi !== montoIdx && pi !== 0).join(' ') : 'Destajo';
+
+    // Buscar proyecto por nombre/clave
+    var pid = djBuscarPid(obra);
+
+    filas.push({ nombre, rubro, monto, pid, obraRaw: obra, semana });
+  });
+
+  djParsed = filas;
+  djRenderPreview(filas, errores, obra, semana);
+}
+
+function djBuscarPid(obraRaw) {
+  if (!obraRaw) return '';
+  var ql = obraRaw.toLowerCase();
+  var match = DB.projects.find(p =>
+    p.name.toLowerCase().includes(ql) ||
+    p.id.toLowerCase().includes(ql) ||
+    ql.includes(p.name.toLowerCase().split(' ')[0].toLowerCase())
+  );
+  return match ? match.id : '';
+}
+
+function djRenderPreview(filas, errores, obra, semana) {
+  var el = document.getElementById('dj-preview');
+  var btn = document.getElementById('dj-btn-guardar');
+  if (!el) return;
+
+  if (!filas.length && !errores.length) { el.innerHTML = ''; btn.style.display='none'; return; }
+
+  // Total
+  var total = filas.reduce((s,f) => s+f.monto, 0);
+
+  var html = '';
+
+  // Errores si hay
+  if (errores.length) {
+    html += `<div style="background:var(--rbg);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--red);margin-bottom:8px">
+      ⚠️ Líneas ignoradas: ${errores.map(e=>'<br>· '+e).join('')}
+    </div>`;
+  }
+
+  if (filas.length) {
+    html += `
+    <div style="border:1px solid var(--g2);border-radius:10px;overflow:hidden">
+      <div style="padding:10px 14px;background:var(--g1);border-bottom:1px solid var(--g2);display:flex;justify-content:space-between;align-items:center">
+        <div>
+          <span style="font-size:13px;font-weight:800;color:var(--navy)">${obra||'Sin obra'}</span>
+          ${semana?`<span style="font-size:11px;color:var(--g4);margin-left:8px">Semana: ${semana}</span>`:''}
+        </div>
+        <span style="font-size:13px;font-weight:800;color:var(--navy)">${fmt(total)}</span>
+      </div>
+      <table style="width:100%;border-collapse:collapse;font-size:12px">
+        <thead>
+          <tr style="background:var(--g1)">
+            <th style="padding:7px 12px;text-align:left;border-bottom:1px solid var(--g2);color:var(--g4);font-weight:700">Trabajador</th>
+            <th style="padding:7px 12px;text-align:left;border-bottom:1px solid var(--g2);color:var(--g4);font-weight:700">Rubro</th>
+            <th style="padding:7px 12px;text-align:left;border-bottom:1px solid var(--g2);color:var(--g4);font-weight:700">Proyecto</th>
+            <th style="padding:7px 12px;text-align:right;border-bottom:1px solid var(--g2);color:var(--g4);font-weight:700">Monto</th>
+          </tr>
+        </thead>
+        <tbody>
+          ${filas.map((f,i) => `
+          <tr style="border-bottom:1px solid var(--g2)">
+            <td style="padding:7px 12px;font-weight:600">${f.nombre}</td>
+            <td style="padding:7px 12px;color:var(--g4)">${f.rubro}</td>
+            <td style="padding:7px 12px">
+              <select style="padding:4px 7px;border:1px solid var(--g2);border-radius:6px;font-size:11px;background:#fff" 
+                onchange="djParsed[${i}].pid=this.value" >
+                <option value="">— Asignar —</option>
+                ${DB.projects.map(p=>`<option value="${p.id}" ${f.pid===p.id?'selected':''}>${p.name}</option>`).join('')}
+              </select>
+            </td>
+            <td style="padding:7px 12px;text-align:right;font-weight:800;color:var(--navy)">${fmt(f.monto)}</td>
+          </tr>`).join('')}
+        </tbody>
+        <tfoot>
+          <tr style="background:var(--g1)">
+            <td colspan="3" style="padding:8px 12px;font-weight:800;color:var(--navy)">TOTAL SEMANA</td>
+            <td style="padding:8px 12px;text-align:right;font-size:14px;font-weight:800;color:var(--navy)">${fmt(total)}</td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>`;
+    btn.style.display = 'inline-flex';
+  } else {
+    btn.style.display = 'none';
+  }
+
+  el.innerHTML = html;
+}
+
+function djGuardar() {
+  if (!djParsed.length) return;
+
+  var hoy = new Date().toISOString().split('T')[0];
+  var semana = djParsed[0].semana || hoy;
+  var guardados = 0;
+
+  djParsed.forEach(f => {
+    var pid = f.pid;
+
+    // Guardar en DB.destajos
+    DB.destajos.push({
+      id: DB.destajos.length + 1,
+      pid, nombre: f.nombre, rubro: f.rubro,
+      monto: f.monto, semana, fecha: hoy
+    });
+
+    // Actualizar gasto del proyecto
+    if (pid) {
+      var p = gP(pid);
+      if (p) { p.gast = (p.gast||0) + f.monto; }
+      // También agregar como expense de mano de obra
+      DB.expenses.push({
+        id: DB.expenses.length + 1,
+        pid, cat: 'Mano de obra / Destajo',
+        sid: null, amount: f.monto, date: hoy,
+        nota: f.nombre + ' · ' + f.rubro + ' · Sem: ' + semana
+      });
+    }
+    guardados++;
+  });
+
+  cm();
+  toast('✅ ' + guardados + ' destajos registrados — ' + fmt(djParsed.reduce((s,f)=>s+f.monto,0)) + ' total');
+  djParsed = [];
+  rObras();
+}
+</script>
+<!-- ═══════════════ FIN DESTAJOS ═══════════════ -->
 
 <!-- ═══════════════ ESTADO DE CUENTA ═══════════════ -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
