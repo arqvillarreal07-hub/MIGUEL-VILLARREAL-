@@ -241,37 +241,7 @@ tbody td{padding:10px 13px;font-size:13px;vertical-align:middle}
   </div>
   <div class="ab">
     <div class="sb" id="SB">
-      <div class="sbn">
-        <div class="sbsec">
-          <div class="sblbl">Principal</div>
-          <div class="nv act" data-p="dashboard" onclick="goTo('dashboard')"><span class="ico">📊</span>Dashboard</div>
-          <div class="nv" data-p="crm" onclick="goTo('crm')"><span class="ico">🎯</span>CRM · Pipeline</div>
-          <div class="nv" data-p="proyectos" onclick="goTo('proyectos')"><span class="ico">📋</span>Proyectos</div>
-          <div class="nv" data-p="cotizaciones" onclick="goTo('cotizaciones')"><span class="ico">📄</span>Cotizaciones</div>
-        </div>
-        <div class="sbsec">
-          <div class="sblbl">Obra</div>
-          <div class="nv" data-p="planproyecto" onclick="goTo('planproyecto')"><span class="ico">📅</span>Plan de Proyecto</div>
-          <div class="nv" data-p="obras" onclick="goTo('obras')"><span class="ico">🏗️</span>Obras</div>
-          <div class="nv" data-p="bitacora" onclick="goTo('bitacora')"><span class="ico">📓</span>Bitácora</div>
-          <div class="nv" data-p="proyeccion" onclick="goTo('proyeccion')" style="position:relative"><span class="ico">📅</span>Proyección Semanal<span id="proy_badge" style="display:none;margin-left:auto;background:var(--gold);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;line-height:1.4">0</span></div>
-        </div>
-        <div class="sbsec">
-          <div class="sblbl">Administración</div>
-          <div class="nv" data-p="finanzas" onclick="goTo('finanzas')"><span class="ico">💰</span>Finanzas</div>
-          <div class="nv" data-p="compras" onclick="goTo('compras')"><span class="ico">🛒</span>Compras</div>
-          <div class="nv" data-p="proveedores" onclick="goTo('proveedores')"><span class="ico">🏢</span>Proveedores</div>
-        </div>
-        <div class="sbsec">
-          <div class="sblbl">Reportes</div>
-          <div class="nv" data-p="partidas" onclick="goTo('partidas')"><span class="ico">📐</span>Partidas</div>
-          <div class="nv" data-p="cotizador" onclick="goTo('cotizador')"><span class="ico">🧮</span>Cotizador m²</div>
-          <div class="nv" data-p="caja" onclick="goTo('caja')"><span class="ico">💵</span>Caja Chica</div>
-          <div class="nv" data-p="documentos" onclick="goTo('documentos')"><span class="ico">📁</span>Documentos</div>
-          <div class="nv" data-p="portal" onclick="goTo('portal')"><span class="ico">🌐</span>Portal Cliente</div>
-          <div class="nv" data-p="estadocuenta" onclick="goTo('estadocuenta')"><span class="ico">🏦</span>Estado de Cuenta</div>
-        </div>
-      </div>
+      <div class="sbn" id="SB_NAV"></div>
       <div class="sbf">
         <button class="lob" onclick="logout()">
           <svg width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></svg>
@@ -547,10 +517,11 @@ function loginOK(){
   $('UN').textContent=DB.user.name.split(' ')[0];
   var startPage = canSee('dashboard') ? 'dashboard' : (PERMISOS[DB.user.id]||[])[0]||'proyectos';
   goTo(startPage);
-  aplicarPermisos();
+  buildSidebar();
+  finFabVisible(true);
   setTimeout(updateProyBadge,100);
 }
-function logout(){DB.user=null;pin='';udots();$('LS').style.display='flex';$('app').classList.remove('v');document.querySelectorAll('.nv[data-p]').forEach(el=>el.style.display='');}
+function logout(){DB.user=null;pin='';udots();$('LS').style.display='flex';$('app').classList.remove('v');document.getElementById('SB_NAV').innerHTML='';finFabVisible(false);document.getElementById('fin-panel').classList.remove('open');}
 
 // ═══════════════ PERMISOS POR ROL ═══════════════
 const PERMISOS = {
@@ -571,16 +542,51 @@ function canSee(page){
   return perms ? perms.includes(page) : false;
 }
 
-function aplicarPermisos(){
-  document.querySelectorAll('.nv[data-p]').forEach(el=>{
-    var p = el.dataset.p;
-    el.style.display = canSee(p) ? '' : 'none';
+// Catálogo completo de items del sidebar
+const NAV_ITEMS = {
+  'Principal': [
+    {p:'dashboard',   ico:'📊', lbl:'Dashboard'},
+    {p:'crm',         ico:'🎯', lbl:'CRM · Pipeline'},
+    {p:'proyectos',   ico:'📋', lbl:'Proyectos'},
+    {p:'cotizaciones',ico:'📄', lbl:'Cotizaciones'},
+  ],
+  'Obra': [
+    {p:'planproyecto',ico:'📅', lbl:'Plan de Proyecto'},
+    {p:'obras',       ico:'🏗️', lbl:'Obras'},
+    {p:'bitacora',    ico:'📓', lbl:'Bitácora'},
+    {p:'proyeccion',  ico:'📅', lbl:'Proyección Semanal', badge:'proy_badge'},
+  ],
+  'Administración': [
+    {p:'finanzas',    ico:'💰', lbl:'Finanzas'},
+    {p:'compras',     ico:'🛒', lbl:'Compras'},
+    {p:'proveedores', ico:'🏢', lbl:'Proveedores'},
+  ],
+  'Reportes': [
+    {p:'partidas',    ico:'📐', lbl:'Partidas'},
+    {p:'cotizador',   ico:'🧮', lbl:'Cotizador m²'},
+    {p:'caja',        ico:'💵', lbl:'Caja Chica'},
+    {p:'documentos',  ico:'📁', lbl:'Documentos'},
+    {p:'portal',      ico:'🌐', lbl:'Portal Cliente'},
+    {p:'estadocuenta',ico:'🏦', lbl:'Estado de Cuenta'},
+  ]
+};
+
+function buildSidebar(){
+  var html = '';
+  Object.entries(NAV_ITEMS).forEach(([sec, items])=>{
+    var visibles = items.filter(it => canSee(it.p));
+    if(!visibles.length) return;
+    html += '<div class="sbsec"><div class="sblbl">'+sec+'</div>';
+    visibles.forEach(it=>{
+      var extra = it.badge
+        ? ' style="position:relative"><span class="ico">'+it.ico+'</span>'+it.lbl
+          +'<span id="'+it.badge+'" style="display:none;margin-left:auto;background:var(--gold);color:#fff;font-size:10px;font-weight:700;padding:2px 7px;border-radius:10px;line-height:1.4">0</span'
+        : '><span class="ico">'+it.ico+'</span>'+it.lbl;
+      html += '<div class="nv" data-p="'+it.p+'" onclick="goTo(\'' + it.p + '\')"'+extra+'></div>';
+    });
+    html += '</div>';
   });
-  // Ocultar secciones del sidebar que quedaron vacías
-  document.querySelectorAll('.sbsec').forEach(sec=>{
-    var visibles = [...sec.querySelectorAll('.nv[data-p]')].filter(el=>el.style.display!=='none');
-    sec.style.display = visibles.length ? '' : 'none';
-  });
+  document.getElementById('SB_NAV').innerHTML = html;
 }
 
 // ═══════════════ NAV ═══════════════
@@ -822,21 +828,56 @@ function opPD(pid){
   om(p.name,`
     <div style="display:flex;gap:8px;margin-bottom:12px;flex-wrap:wrap">${bd(p.status)}<span class="bdg bgr">${p.type}</span><span class="sem ${sc(p.sem)}">${sl(p.sem)}</span></div>
     <div style="font-size:13px;color:var(--g4);margin-bottom:14px">Cliente: <strong>${(c&&c.name)}</strong> · ${(c&&c.contact)}</div>
+    <!-- MONTOS CON INPUT DIRECTO -->
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
-      <div style="background:var(--g1);border-radius:8px;padding:11px;text-align:center"><div style="font-size:10px;color:var(--g4);margin-bottom:3px">CONTRATADO</div><div style="font-size:14px;font-weight:800;color:var(--navy)">${fK(p.cont||p.cot)}</div></div>
-      <div style="background:var(--gbg);border-radius:8px;padding:11px;text-align:center"><div style="font-size:10px;color:var(--green);margin-bottom:3px">COBRADO</div><div style="font-size:14px;font-weight:800;color:var(--green)">${fK(p.cob)}</div></div>
-      <div style="background:var(--abg);border-radius:8px;padding:11px;text-align:center"><div style="font-size:10px;color:var(--amber);margin-bottom:3px">GASTADO</div><div style="font-size:14px;font-weight:800;color:var(--amber)">${fK(p.gast)}</div></div>
+      <div style="background:var(--g1);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--g4);margin-bottom:4px;font-weight:700">CONTRATADO</div>
+        <input type="number" id="ed_cont" value="${p.cont||p.cot}" style="width:100%;border:1.5px solid var(--g2);border-radius:6px;padding:5px;font-size:14px;font-weight:800;color:var(--navy);text-align:center;background:#fff" onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--g2)'">
+      </div>
+      <div style="background:var(--gbg);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--green);margin-bottom:4px;font-weight:700">COBRADO</div>
+        <input type="number" id="ed_cob" value="${p.cob}" style="width:100%;border:1.5px solid var(--g2);border-radius:6px;padding:5px;font-size:14px;font-weight:800;color:var(--green);text-align:center;background:#fff" onfocus="this.style.borderColor='var(--green)'" onblur="this.style.borderColor='var(--g2)'">
+      </div>
+      <div style="background:var(--abg);border-radius:8px;padding:10px;text-align:center">
+        <div style="font-size:10px;color:var(--amber);margin-bottom:4px;font-weight:700">GASTADO</div>
+        <input type="number" id="ed_gast" value="${p.gast}" style="width:100%;border:1.5px solid var(--g2);border-radius:6px;padding:5px;font-size:14px;font-weight:800;color:var(--amber);text-align:center;background:#fff" onfocus="this.style.borderColor='var(--amber)'" onblur="this.style.borderColor='var(--g2)'">
+      </div>
     </div>
     ${w?`<div style="margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:var(--g4);margin-bottom:5px">AVANCE GENERAL</div><div class="pw"><div class="pb2 ${pc(p.sem)}" style="width:${p.prog}%"></div></div><div style="font-size:11px;color:var(--g5);margin-top:3px">${p.prog}% · Etapa: ${w.stage}</div></div>`:''}
-    <div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--g4);margin-bottom:6px">ÚLTIMOS MOVIMIENTOS</div>
+    <div style="margin-bottom:6px"><div style="font-size:11px;font-weight:700;color:var(--g4);margin-bottom:6px">ÚLTIMOS MOVIMIENTOS</div>
     ${revs.slice(-2).map(r=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--g2);font-size:12px"><span>💵 ${r.type} · ${r.date}</span><span class="amt g">${fmt(r.amount)}</span></div>`).join('')}
     ${exps.slice(-2).map(e=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--g2);font-size:12px"><span>💳 ${e.cat}</span><span class="amt r">-${fmt(e.amount)}</span></div>`).join('')}
     </div>
     <div style="font-size:12px;color:var(--g4)">Margen estimado: <strong style="color:${parseFloat(m)>10?'var(--green)':'var(--red)'}">${m}%</strong></div>`,
     `<button class="btn bo" onclick="cm()">Cerrar</button>
+     <button class="btn bp bsm" onclick="guardarMontos('${pid}')">💾 Guardar montos</button>
      ${w?`<button class="btn bp" onclick="cm();goTo('obras')">Ver obra →</button>`:''}
-     <button class="btn bg" onclick="cm();goTo('finanzas')">Finanzas →</button>`
+     <button class="btn bg" onclick="cm();finIrFinanzas('${pid}')">Finanzas →</button>`
   );
+}
+
+function finIrFinanzas(pid){
+  cm();
+  if(!canSee('finanzas')){ toast('⛔ Sin acceso a Finanzas'); return; }
+  goTo('finanzas');
+  // Pre-abrir el FAB con ese proyecto seleccionado
+  setTimeout(()=>{
+    toggleFinPanel();
+    var sel=document.getElementById('fin-proyecto');
+    if(sel) sel.value=pid;
+  },300);
+}
+
+function guardarMontos(pid){
+  const p=gP(pid);
+  const cont=parseInt(document.getElementById('ed_cont').value)||0;
+  const cob=parseInt(document.getElementById('ed_cob').value)||0;
+  const gast=parseInt(document.getElementById('ed_gast').value)||0;
+  p.cont=cont; p.cot=cont; p.cob=cob; p.gast=gast;
+  const w=DB.works.find(x=>x.pid===pid);
+  if(w) w.spent=gast;
+  cm();
+  toast('✅ Montos actualizados');
 }
 
 // ══════════════════════════════════════
@@ -953,7 +994,10 @@ function pdfCot(i){
     <div style="text-align:center"><div style="border-top:1px solid #333;padding-top:7px;font-size:11px">Nombre y firma del cliente<br>Fecha: _______________</div></div>
   </div>
   <div class="ft">Villarreal Arquitectura · arquitectura atemporal ® · contacto@vaarq.mx · Aguascalientes, México</div>
-  <script>window.onload=()=>window.print()<\/script></body></html>`);
+  <script>window.onload=()=>window.print()<\/script>
+
+
+</body></html>`);
   w.document.close();
 }
 function openNewCot(){
@@ -4093,5 +4137,179 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 </script>
 
+
+<!-- ═══════════════ FAB FINANZAS ═══════════════ -->
+<style>
+#fin-fab{position:fixed;bottom:92px;right:22px;width:50px;height:50px;border-radius:50%;
+  background:linear-gradient(135deg,var(--green),#43a047);border:none;cursor:pointer;
+  box-shadow:0 4px 16px rgba(0,0,0,.3);display:none;align-items:center;justify-content:center;
+  z-index:9997;transition:transform .2s;font-size:22px}
+#fin-fab:active{transform:scale(.9)}
+#fin-panel{position:fixed;bottom:152px;right:16px;width:340px;max-width:calc(100vw - 24px);
+  background:#fff;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.22);
+  display:none;flex-direction:column;z-index:9996;overflow:hidden;border:1px solid var(--g2)}
+#fin-panel.open{display:flex}
+.fin-tipo-btn{flex:1;padding:10px;border:2px solid var(--g2);border-radius:10px;font-size:13px;
+  font-weight:700;cursor:pointer;background:#fff;transition:.15s;text-align:center}
+.fin-tipo-btn.ing{border-color:var(--green);background:var(--gbg);color:var(--green)}
+.fin-tipo-btn.egr{border-color:var(--red);background:var(--rbg);color:var(--red)}
+</style>
+
+<button id="fin-fab" onclick="toggleFinPanel()" title="Registrar ingreso / egreso">💰</button>
+
+<div id="fin-panel">
+  <div style="padding:14px 16px;background:var(--navy);display:flex;align-items:center;justify-content:space-between">
+    <div style="color:#fff;font-weight:800;font-size:14px">💰 Registro rápido</div>
+    <button onclick="toggleFinPanel()" style="background:none;border:none;color:rgba(255,255,255,.7);font-size:18px;cursor:pointer;line-height:1">✕</button>
+  </div>
+  <div style="padding:14px;display:flex;flex-direction:column;gap:12px">
+
+    <!-- TIPO -->
+    <div style="display:flex;gap:8px">
+      <button id="fin-btn-ing" class="fin-tipo-btn ing" onclick="finSetTipo('ingreso')">↑ Ingreso</button>
+      <button id="fin-btn-egr" class="fin-tipo-btn" onclick="finSetTipo('egreso')">↓ Egreso</button>
+    </div>
+
+    <!-- MONTO grande -->
+    <div style="position:relative">
+      <span style="position:absolute;left:12px;top:50%;transform:translateY(-50%);font-size:18px;font-weight:700;color:var(--g4)">$</span>
+      <input id="fin-monto" type="number" placeholder="0.00" inputmode="decimal"
+        style="width:100%;padding:12px 12px 12px 28px;border:2px solid var(--g2);border-radius:10px;font-size:22px;font-weight:800;color:var(--navy);outline:none"
+        onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--g2)'"
+        onkeydown="if(event.key==='Enter')document.getElementById('fin-concepto').focus()">
+    </div>
+
+    <!-- CONCEPTO -->
+    <input id="fin-concepto" type="text" placeholder="Concepto (ej: Anticipo Casa Fontana)"
+      style="width:100%;padding:10px 12px;border:2px solid var(--g2);border-radius:10px;font-size:13px;outline:none"
+      onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--g2)'"
+      onkeydown="if(event.key==='Enter')finGuardar()">
+
+    <!-- PROYECTO -->
+    <select id="fin-proyecto"
+      style="width:100%;padding:10px 12px;border:2px solid var(--g2);border-radius:10px;font-size:13px;background:#fff;outline:none">
+      <option value="">— Proyecto (opcional) —</option>
+    </select>
+
+    <!-- FECHA -->
+    <div style="display:flex;align-items:center;gap:8px">
+      <input id="fin-fecha" type="date"
+        style="flex:1;padding:9px 12px;border:2px solid var(--g2);border-radius:10px;font-size:13px;outline:none">
+      <span style="font-size:11px;color:var(--g4)">Hoy</span>
+      <button onclick="document.getElementById('fin-fecha').value=today()"
+        style="padding:6px 10px;border:1px solid var(--g2);border-radius:8px;font-size:11px;cursor:pointer;background:var(--g1);font-weight:600">↺</button>
+    </div>
+
+    <!-- GUARDAR -->
+    <button id="fin-guardar-btn" onclick="finGuardar()"
+      style="width:100%;padding:13px;border:none;border-radius:10px;background:var(--green);color:#fff;font-size:15px;font-weight:800;cursor:pointer;transition:.15s"
+      onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">
+      ✅ Guardar ingreso
+    </button>
+  </div>
+</div>
+
+<script>
+var finTipo = 'ingreso';
+
+function toggleFinPanel(){
+  var panel = document.getElementById('fin-panel');
+  var fab = document.getElementById('fin-fab');
+  var isOpen = panel.classList.contains('open');
+  // Cerrar el chat si está abierto
+  var aiPanel = document.getElementById('ai-panel');
+  if(aiPanel) aiPanel.classList.remove('open');
+  if(isOpen){
+    panel.classList.remove('open');
+  } else {
+    panel.classList.add('open');
+    // Llenar proyectos
+    var sel = document.getElementById('fin-proyecto');
+    sel.innerHTML = '<option value="">— Proyecto (opcional) —</option>';
+    DB.projects.forEach(p => sel.innerHTML += '<option value="'+p.id+'">'+p.name+'</option>');
+    // Fecha de hoy
+    document.getElementById('fin-fecha').value = today();
+    // Limpiar campos
+    document.getElementById('fin-monto').value = '';
+    document.getElementById('fin-concepto').value = '';
+    setTimeout(()=>document.getElementById('fin-monto').focus(), 200);
+  }
+}
+
+function finSetTipo(tipo){
+  finTipo = tipo;
+  var bIng = document.getElementById('fin-btn-ing');
+  var bEgr = document.getElementById('fin-btn-egr');
+  var btn  = document.getElementById('fin-guardar-btn');
+  var monto = document.getElementById('fin-monto');
+  if(tipo === 'ingreso'){
+    bIng.className = 'fin-tipo-btn ing';
+    bEgr.className = 'fin-tipo-btn';
+    btn.style.background = 'var(--green)';
+    btn.textContent = '✅ Guardar ingreso';
+    monto.style.color = 'var(--green)';
+  } else {
+    bEgr.className = 'fin-tipo-btn egr';
+    bIng.className = 'fin-tipo-btn';
+    btn.style.background = 'var(--red)';
+    btn.textContent = '✅ Guardar egreso';
+    monto.style.color = 'var(--red)';
+  }
+}
+
+function finGuardar(){
+  var monto   = parseFloat(document.getElementById('fin-monto').value)||0;
+  var concepto= document.getElementById('fin-concepto').value.trim();
+  var pid     = document.getElementById('fin-proyecto').value;
+  var fecha   = document.getElementById('fin-fecha').value || today();
+
+  if(!monto){ toast('⚠️ Escribe el monto'); document.getElementById('fin-monto').focus(); return; }
+  if(!concepto){ toast('⚠️ Escribe el concepto'); document.getElementById('fin-concepto').focus(); return; }
+
+  if(finTipo === 'ingreso'){
+    DB.revenues.push({
+      id: DB.revenues.length+1,
+      pid: pid||null,
+      type: concepto,
+      amount: monto,
+      date: fecha,
+      ref: ''
+    });
+    // Actualizar cobrado del proyecto
+    if(pid){ var p=gP(pid); if(p) p.cob=(p.cob||0)+monto; }
+    toast('✅ Ingreso registrado — '+fmt(monto));
+  } else {
+    DB.expenses.push({
+      id: DB.expenses.length+1,
+      pid: pid||null,
+      cat: concepto,
+      sid: null,
+      amount: monto,
+      date: fecha,
+      nota: concepto
+    });
+    // Actualizar gasto del proyecto
+    if(pid){ var p=gP(pid); if(p) p.gast=(p.gast||0)+monto; }
+    toast('✅ Egreso registrado — '+fmt(monto));
+  }
+
+  // Cerrar panel y refrescar si estamos en finanzas
+  document.getElementById('fin-panel').classList.remove('open');
+  if(document.querySelector('.nv.act[data-p="finanzas"]')) rFin();
+  if(document.querySelector('.nv.act[data-p="dashboard"]')) rDash();
+}
+
+// Mostrar el FAB solo cuando el usuario está logueado
+function finFabVisible(show){
+  document.getElementById('fin-fab').style.display = show ? 'flex' : 'none';
+}
+
+// Cerrar al hacer clic fuera
+document.addEventListener('click', e=>{
+  if(!e.target.closest('#fin-panel') && !e.target.closest('#fin-fab'))
+    document.getElementById('fin-panel').classList.remove('open');
+});
+</script>
+<!-- ═══════════════ FIN FAB FINANZAS ═══════════════ -->
 </body>
 </html>
