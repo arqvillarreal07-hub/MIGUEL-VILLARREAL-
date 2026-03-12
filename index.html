@@ -405,6 +405,7 @@ const DB={
     {id:9,pid:'BEL-EXT-01',type:'Total',amount:380000,date:'2025-01-20',ref:'TRF-028'},
   ],
   destajos:[],
+  preauth:[],  // movimientos pendientes de autorización
   expenses:[
     {id:1,pid:'CF-OBR-01',cat:'Mano de obra',sid:3,amount:580000,date:'2025-02-28'},
     {id:2,pid:'CF-OBR-01',cat:'Materiales',sid:1,amount:420000,date:'2025-02-20'},
@@ -525,7 +526,7 @@ function logout(){DB.user=null;pin='';udots();$('LS').style.display='flex';$('ap
 
 // ═══════════════ PERMISOS POR ROL ═══════════════
 const PERMISOS = {
-  1: ['dashboard','crm','proyectos','cotizaciones','planproyecto','obras','bitacora','proyeccion',
+  1: ['dashboard','autorizaciones','crm','proyectos','cotizaciones','planproyecto','obras','bitacora','proyeccion',
       'finanzas','compras','proveedores','partidas','cotizador','caja','documentos','portal',
       'estadocuenta','destajos'],                                           // Miguel — todo
   2: ['proyectos','cotizaciones','planproyecto','obras','bitacora',
@@ -546,6 +547,7 @@ function canSee(page){
 const NAV_ITEMS = {
   'Principal': [
     {p:'dashboard',   ico:'📊', lbl:'Dashboard'},
+    {p:'autorizaciones', ico:'🔐', lbl:'Autorizaciones', badge:'auth_badge'},
     {p:'crm',         ico:'🎯', lbl:'CRM · Pipeline'},
     {p:'proyectos',   ico:'📋', lbl:'Proyectos'},
     {p:'cotizaciones',ico:'📄', lbl:'Cotizaciones'},
@@ -560,11 +562,11 @@ const NAV_ITEMS = {
     {p:'finanzas',    ico:'💰', lbl:'Finanzas'},
     {p:'compras',     ico:'🛒', lbl:'Compras'},
     {p:'proveedores', ico:'🏢', lbl:'Proveedores'},
+    {p:'caja',        ico:'💵', lbl:'Caja Chica'},
+    {p:'partidas',    ico:'📐', lbl:'Partidas'},
   ],
   'Reportes': [
-    {p:'partidas',    ico:'📐', lbl:'Partidas'},
     {p:'cotizador',   ico:'🧮', lbl:'Cotizador m²'},
-    {p:'caja',        ico:'💵', lbl:'Caja Chica'},
     {p:'documentos',  ico:'📁', lbl:'Documentos'},
     {p:'portal',      ico:'🌐', lbl:'Portal Cliente'},
     {p:'estadocuenta',ico:'🏦', lbl:'Estado de Cuenta'},
@@ -587,6 +589,7 @@ function buildSidebar(){
     html += '</div>';
   });
   document.getElementById('SB_NAV').innerHTML = html;
+  setTimeout(actualizarAuthBadge,50);
 }
 
 // ═══════════════ NAV ═══════════════
@@ -598,7 +601,7 @@ function goTo(page){
   }
   document.querySelectorAll('.nv').forEach(el=>el.classList.toggle('act',el.dataset.p===page));
   $('MN').innerHTML='';
-  const map={dashboard:rDash,crm:rCRM,proyectos:rProj,cotizaciones:rCots,obras:rObras,bitacora:rBit,proyeccion:rProyeccion,finanzas:rFin,compras:rComp,proveedores:rProv,partidas:rPartidas,cotizador:rCotizador,caja:rCaja,documentos:rDocs,portal:rPortal,estadocuenta:rEstadoCuenta,planproyecto:rPlanProyecto};
+  const map={dashboard:rDash,crm:rCRM,proyectos:rProj,cotizaciones:rCots,obras:rObras,bitacora:rBit,proyeccion:rProyeccion,finanzas:rFin,compras:rComp,proveedores:rProv,partidas:rPartidas,cotizador:rCotizador,caja:rCaja,documentos:rDocs,portal:rPortal,estadocuenta:rEstadoCuenta,planproyecto:rPlanProyecto,autorizaciones:rAutorizaciones};
   if(map[page]) map[page]();
   if(window.innerWidth<768){$('SB').classList.remove('open');$('OV').classList.remove('open')}
 }
@@ -1024,7 +1027,10 @@ function rObras(){
   $('MN').innerHTML=`
   <div class="ph3">
     <div><div class="pt">Obras activas</div><div class="ps">${DB.works.length} obras en ejecución</div></div>
-    <button class="btn bp" onclick="goTo('bitacora')">+ Entrada bitácora</button>
+    <div style="display:flex;gap:8px">
+      <button class="btn bg" onclick="abrirNuevaObra()">+ Nueva obra</button>
+      <button class="btn bp" onclick="goTo('bitacora')">+ Entrada bitácora</button>
+    </div>
   </div>
   ${DB.works.map(w=>{
     const res=gU(w.uid);const bpct=Math.round(w.spent/w.budget*100);
@@ -3542,6 +3548,247 @@ function djGuardar() {
 </script>
 <!-- ═══════════════ FIN DESTAJOS ═══════════════ -->
 
+
+<!-- ═══════════════ NUEVA OBRA + AUTORIZACIONES ═══════════════ -->
+<script>
+// ─── PARTIDAS PREDISEÑADAS ────────────────────────────────────────────────────
+const PARTIDAS_OBRA = [
+  {rub:'OBRA GRIS',    nom:'Preliminares',         pct:2},
+  {rub:'OBRA GRIS',    nom:'Trazo y nivelación',   pct:1},
+  {rub:'OBRA GRIS',    nom:'Cimentación',           pct:12},
+  {rub:'OBRA GRIS',    nom:'Estructura',            pct:18},
+  {rub:'OBRA GRIS',    nom:'Albañilería',           pct:10},
+  {rub:'OBRA GRIS',    nom:'Losas',                 pct:8},
+  {rub:'ACABADOS',     nom:'Yeso y pintura',        pct:7},
+  {rub:'ACABADOS',     nom:'Pisos y azulejo',       pct:8},
+  {rub:'ACABADOS',     nom:'Carpintería',           pct:8},
+  {rub:'ACABADOS',     nom:'Herrería y cancelería', pct:5},
+  {rub:'INSTALACIONES',nom:'Eléctrico',             pct:5},
+  {rub:'INSTALACIONES',nom:'Hidráulico y sanitario',pct:5},
+  {rub:'INSTALACIONES',nom:'Gas',                  pct:2},
+  {rub:'INDIRECTOS',   nom:'Supervisión / Residente',pct:4},
+  {rub:'INDIRECTOS',   nom:'IMSS y prestaciones',  pct:3},
+  {rub:'INDIRECTOS',   nom:'Limpieza y entrega',   pct:2},
+];
+
+function abrirNuevaObra(){
+  var proysSinObra = DB.projects.filter(p=>!DB.works.find(w=>w.pid===p.id));
+  var partHtml = PARTIDAS_OBRA.map((p,i)=>`
+    <label style="display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid var(--g2);cursor:pointer;font-size:12px">
+      <input type="checkbox" id="nop_${i}" checked style="width:14px;height:14px;cursor:pointer">
+      <span style="flex:1;color:var(--g5)">${p.nom}</span>
+      <span style="font-size:10px;color:var(--g4);background:var(--g1);padding:2px 6px;border-radius:4px">${p.rub}</span>
+      <span style="font-size:11px;font-weight:700;color:var(--navy);width:30px;text-align:right">${p.pct}%</span>
+    </label>`).join('');
+
+  om('🏗️ Nueva obra',`
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div class="g2c">
+        <div class="fg"><div class="fl">Nombre de la obra *</div>
+          <input class="fi" id="no_nombre" placeholder="Ej: CASA GARCÍA"></div>
+        <div class="fg"><div class="fl">Proyecto vinculado</div>
+          <select class="fsl" id="no_pid">
+            <option value="">— Sin vincular —</option>
+            ${DB.projects.map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}
+          </select></div>
+      </div>
+      <div class="g2c">
+        <div class="fg"><div class="fl">Dirección / Ubicación</div>
+          <input class="fi" id="no_addr" placeholder="Ej: Jardines, Aguascalientes"></div>
+        <div class="fg"><div class="fl">Responsable</div>
+          <select class="fsl" id="no_uid">
+            ${DB.users.map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}
+          </select></div>
+      </div>
+      <div class="g2c">
+        <div class="fg"><div class="fl">Presupuesto total *</div>
+          <input class="fi" id="no_budget" type="number" placeholder="0"></div>
+        <div class="fg"><div class="fl">Fecha de inicio</div>
+          <input class="fi" id="no_inicio" type="date" value="${today()}"></div>
+      </div>
+
+      <!-- PARTIDAS -->
+      <div style="margin-top:4px">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+          <div style="font-size:12px;font-weight:700;color:var(--navy)">Partidas a incluir</div>
+          <div style="display:flex;gap:6px">
+            <button onclick="document.querySelectorAll('[id^=nop_]').forEach(c=>c.checked=true)" style="font-size:11px;padding:3px 8px;border:1px solid var(--g2);border-radius:5px;cursor:pointer;background:var(--g1)">Todas</button>
+            <button onclick="document.querySelectorAll('[id^=nop_]').forEach(c=>c.checked=false)" style="font-size:11px;padding:3px 8px;border:1px solid var(--g2);border-radius:5px;cursor:pointer;background:var(--g1)">Ninguna</button>
+          </div>
+        </div>
+        <div style="max-height:220px;overflow-y:auto;border:1px solid var(--g2);border-radius:8px;padding:4px 10px">
+          ${partHtml}
+        </div>
+      </div>
+    </div>`,
+    `<button class="btn bo" onclick="cm()">Cancelar</button>
+     <button class="btn bp" onclick="guardarNuevaObra()">✅ Crear obra</button>`
+  );
+}
+
+function guardarNuevaObra(){
+  var nombre  = document.getElementById('no_nombre').value.trim().toUpperCase();
+  var pid     = document.getElementById('no_pid').value;
+  var addr    = document.getElementById('no_addr').value.trim() || 'Aguascalientes';
+  var uid     = parseInt(document.getElementById('no_uid').value);
+  var budget  = parseInt(document.getElementById('no_budget').value)||0;
+  var inicio  = document.getElementById('no_inicio').value;
+
+  if(!nombre){ toast('⚠️ Escribe el nombre de la obra'); return; }
+  if(!budget){ toast('⚠️ Ingresa el presupuesto'); return; }
+
+  // Construir partidas seleccionadas
+  var partidas = PARTIDAS_OBRA
+    .filter((_,i)=>document.getElementById('nop_'+i)&&document.getElementById('nop_'+i).checked)
+    .map(p=>({
+      rub:p.rub, nom:p.nom,
+      pres:Math.round(budget*(p.pct/100)),
+      gast:0, p:0
+    }));
+
+  // Crear etapas automáticas agrupadas por rubro
+  var rubros=[...new Set(partidas.map(p=>p.rub))];
+  var stages=rubros.map(r=>({n:r,p:0}));
+  stages.push({n:'Entrega',p:0});
+
+  var newId='OBR-'+String(DB.works.length+1).padStart(3,'0');
+  DB.works.push({
+    id:newId, pid:pid||null, name:nombre,
+    uid, addr, prog:0, sem:'blue',
+    budget, spent:0, stage:'Inicio',
+    log:inicio, stages, partidas
+  });
+
+  // Si tiene proyecto vinculado, actualizar
+  if(pid){ var p=gP(pid); if(p&&!p.cont) p.cont=budget; }
+
+  cm();
+  toast('✅ Obra "'+nombre+'" creada con '+partidas.length+' partidas');
+  rObras();
+}
+
+// ─── FLUJO DE AUTORIZACIÓN ────────────────────────────────────────────────────
+function finEnviarAuth(){
+  var monto   = parseFloat(document.getElementById('fin-monto').value)||0;
+  var concepto= document.getElementById('fin-concepto').value.trim();
+  var pid     = document.getElementById('fin-proyecto').value;
+  var fecha   = document.getElementById('fin-fecha').value||today();
+
+  if(!monto){ toast('⚠️ Escribe el monto'); document.getElementById('fin-monto').focus(); return; }
+  if(!concepto){ toast('⚠️ Escribe el concepto'); document.getElementById('fin-concepto').focus(); return; }
+
+  DB.preauth.push({
+    id: Date.now(),
+    tipo: finTipo,
+    monto, concepto, pid,
+    fecha, uid: DB.user.id,
+    status: 'pendiente',
+    ts: new Date().toISOString()
+  });
+
+  document.getElementById('fin-panel').classList.remove('open');
+  // Actualizar badge
+  actualizarAuthBadge();
+  toast('📤 Enviado — pendiente de autorización del Director');
+  // Limpiar
+  document.getElementById('fin-monto').value='';
+  document.getElementById('fin-concepto').value='';
+}
+
+function actualizarAuthBadge(){
+  var badge=document.getElementById('auth_badge');
+  if(!badge) return;
+  var pend=DB.preauth.filter(a=>a.status==='pendiente').length;
+  badge.textContent=pend;
+  badge.style.display=pend>0?'inline-flex':'none';
+}
+
+function rAutorizaciones(){
+  var pend=DB.preauth.filter(a=>a.status==='pendiente');
+  var hist=DB.preauth.filter(a=>a.status!=='pendiente').slice().reverse().slice(0,20);
+
+  $('MN').innerHTML=`
+  <div class="ph3">
+    <div><div class="pt">🔐 Autorizaciones</div>
+    <div class="ps">${pend.length} movimiento${pend.length!==1?'s':''} pendiente${pend.length!==1?'s':''} de revisión</div></div>
+  </div>
+
+  ${pend.length===0?`
+    <div class="card" style="text-align:center;padding:48px 24px;color:var(--g4)">
+      <div style="font-size:36px;margin-bottom:10px">✅</div>
+      <div style="font-weight:700">Todo al corriente</div>
+      <div style="font-size:13px;margin-top:4px">No hay movimientos pendientes de autorizar</div>
+    </div>`:
+
+  `<div class="card" style="padding:0;overflow:hidden">
+    <div style="padding:12px 16px;background:var(--abg);border-bottom:1px solid var(--g2);font-size:12px;font-weight:700;color:var(--amber)">⏳ PENDIENTES DE AUTORIZACIÓN</div>
+    ${pend.map(a=>{
+      var u=gU(a.uid); var p=a.pid?gP(a.pid):null;
+      return`<div style="padding:14px 16px;border-bottom:1px solid var(--g2)">
+        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
+          <div style="flex:1;min-width:200px">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
+              <span style="padding:3px 8px;border-radius:99px;font-size:11px;font-weight:700;background:${a.tipo==='ingreso'?'var(--gbg)':'var(--rbg)'};color:${a.tipo==='ingreso'?'var(--green)':'var(--red)'}">${a.tipo==='ingreso'?'↑ Ingreso':'↓ Egreso'}</span>
+              <span style="font-size:15px;font-weight:800;color:var(--navy)">${fmt(a.monto)}</span>
+            </div>
+            <div style="font-size:13px;color:var(--g5);margin-bottom:3px">${a.concepto}</div>
+            <div style="font-size:11px;color:var(--g4)">
+              👤 ${u?u.name:'—'} · 📅 ${a.fecha}${p?' · 📋 '+p.name:''}
+            </div>
+          </div>
+          <div style="display:flex;gap:6px;flex-shrink:0">
+            <button class="btn bsm" style="background:var(--gbg);color:var(--green);border:1.5px solid var(--green)" onclick="authMovimiento(${a.id},'aprobado')">✅ Aprobar</button>
+            <button class="btn bsm" style="background:var(--rbg);color:var(--red);border:1.5px solid var(--red)" onclick="authMovimiento(${a.id},'rechazado')">✕ Rechazar</button>
+          </div>
+        </div>
+      </div>`;
+    }).join('')}
+  </div>`}
+
+  ${hist.length?`
+  <div class="card" style="padding:0;overflow:hidden">
+    <div style="padding:12px 16px;background:var(--g1);border-bottom:1px solid var(--g2);font-size:12px;font-weight:700;color:var(--g4)">HISTORIAL RECIENTE</div>
+    ${hist.map(a=>{
+      var u=gU(a.uid); var p=a.pid?gP(a.pid):null;
+      var ok=a.status==='aprobado';
+      return`<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--g2)">
+        <span style="font-size:16px">${ok?'✅':'✕'}</span>
+        <div style="flex:1">
+          <div style="font-size:12px;font-weight:600;color:var(--g5)">${a.concepto}</div>
+          <div style="font-size:11px;color:var(--g4)">${u?u.name:''} · ${a.fecha}${p?' · '+p.name:''}</div>
+        </div>
+        <span style="font-size:13px;font-weight:800;color:${a.tipo==='ingreso'?'var(--green)':'var(--red)'}">${a.tipo==='ingreso'?'+':'-'}${fmt(a.monto)}</span>
+        <span style="font-size:11px;font-weight:700;color:${ok?'var(--green)':'var(--red)'}">${a.status}</span>
+      </div>`;
+    }).join('')}
+  </div>`:''}
+  `;
+}
+
+function authMovimiento(id, status){
+  var a=DB.preauth.find(x=>x.id===id);
+  if(!a) return;
+  a.status=status;
+
+  if(status==='aprobado'){
+    // Registrar el movimiento real
+    if(a.tipo==='ingreso'){
+      DB.revenues.push({id:DB.revenues.length+1,pid:a.pid||null,type:a.concepto,amount:a.monto,date:a.fecha,ref:''});
+      if(a.pid){var p=gP(a.pid);if(p)p.cob=(p.cob||0)+a.monto;}
+    } else {
+      DB.expenses.push({id:DB.expenses.length+1,pid:a.pid||null,cat:a.concepto,sid:null,amount:a.monto,date:a.fecha});
+      if(a.pid){var p=gP(a.pid);if(p)p.gast=(p.gast||0)+a.monto;}
+    }
+    toast('✅ Movimiento aprobado y registrado');
+  } else {
+    toast('✕ Movimiento rechazado');
+  }
+
+  actualizarAuthBadge();
+  rAutorizaciones();
+}
+</script>
+<!-- ═══════════════ FIN NUEVA OBRA + AUTORIZACIONES ═══════════════ -->
 <!-- ═══════════════ ESTADO DE CUENTA ═══════════════ -->
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
@@ -4179,11 +4426,14 @@ document.addEventListener('DOMContentLoaded', function() {
         onkeydown="if(event.key==='Enter')document.getElementById('fin-concepto').focus()">
     </div>
 
+    <!-- CATEGORÍAS RÁPIDAS -->
+    <div id="fin-cats" style="display:flex;flex-wrap:wrap;gap:5px"></div>
+
     <!-- CONCEPTO -->
-    <input id="fin-concepto" type="text" placeholder="Concepto (ej: Anticipo Casa Fontana)"
+    <input id="fin-concepto" type="text" placeholder="Concepto o descripción"
       style="width:100%;padding:10px 12px;border:2px solid var(--g2);border-radius:10px;font-size:13px;outline:none"
       onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--g2)'"
-      onkeydown="if(event.key==='Enter')finGuardar()">
+      onkeydown="if(event.key==='Enter')finEnviarAuth()">
 
     <!-- PROYECTO -->
     <select id="fin-proyecto"
@@ -4201,16 +4451,49 @@ document.addEventListener('DOMContentLoaded', function() {
     </div>
 
     <!-- GUARDAR -->
-    <button id="fin-guardar-btn" onclick="finGuardar()"
+    <button id="fin-guardar-btn" onclick="finEnviarAuth()"
       style="width:100%;padding:13px;border:none;border-radius:10px;background:var(--green);color:#fff;font-size:15px;font-weight:800;cursor:pointer;transition:.15s"
       onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">
-      ✅ Guardar ingreso
+      📤 Enviar para autorización
     </button>
   </div>
 </div>
 
 <script>
 var finTipo = 'ingreso';
+
+var FIN_CATS = {
+  ingreso: ['Anticipo','Estimación','Finiquito','Renta','Honorarios','Venta','Otro ingreso'],
+  egreso:  ['Nómina','Mano de obra','Materiales','Herramienta','Transporte',
+             'Servicio externo','Honorarios','Destajos','Gastos varios']
+};
+
+function finRenderCats(){
+  var cats = FIN_CATS[finTipo] || [];
+  var color = finTipo==='ingreso' ? 'var(--green)' : 'var(--red)';
+  var bg    = finTipo==='ingreso' ? 'var(--gbg)'   : 'var(--rbg)';
+  document.getElementById('fin-cats').innerHTML = cats.map(cat=>
+    `<button onclick="finSelCat('${cat}')"
+      style="padding:5px 10px;border:1.5px solid ${color};border-radius:99px;
+             font-size:11px;font-weight:600;color:${color};background:#fff;
+             cursor:pointer;transition:.1s"
+      onmouseover="this.style.background='${bg}'"
+      onmouseout="this.style.background='#fff'">${cat}</button>`
+  ).join('');
+}
+
+function finSelCat(cat){
+  var input = document.getElementById('fin-concepto');
+  input.value = cat;
+  input.focus();
+  // Highlight chips
+  document.querySelectorAll('#fin-cats button').forEach(b=>{
+    var color = finTipo==='ingreso' ? 'var(--green)' : 'var(--red)';
+    var bg    = finTipo==='ingreso' ? 'var(--gbg)'   : 'var(--rbg)';
+    if(b.textContent===cat){ b.style.background=bg; b.style.fontWeight='800'; }
+    else { b.style.background='#fff'; b.style.fontWeight='600'; }
+  });
+}
 
 function toggleFinPanel(){
   var panel = document.getElementById('fin-panel');
@@ -4232,12 +4515,14 @@ function toggleFinPanel(){
     // Limpiar campos
     document.getElementById('fin-monto').value = '';
     document.getElementById('fin-concepto').value = '';
+    finRenderCats();
     setTimeout(()=>document.getElementById('fin-monto').focus(), 200);
   }
 }
 
 function finSetTipo(tipo){
   finTipo = tipo;
+  finRenderCats();
   var bIng = document.getElementById('fin-btn-ing');
   var bEgr = document.getElementById('fin-btn-egr');
   var btn  = document.getElementById('fin-guardar-btn');
