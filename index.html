@@ -406,6 +406,11 @@ const DB={
   ],
   destajos:[],
   preauth:[],  // movimientos pendientes de autorización
+  personal:[
+    {id:1,nombre:'Carlos Martínez Ramos',puesto:'Maestro de obra',tipo:'Nómina',salario:18000,nss:'123456789012',curp:'MARC850101HAGLRR01',rfc:'MARC850101XY0',telefono:'449 100 1001',email:'carlos@obra.mx',banco:'BBVA',cuenta:'****1234',pid:'CF-OBR-01',activo:true,alta:'2024-10-01'},
+    {id:2,nombre:'José Luis Pérez',puesto:'Albañil',tipo:'Nómina',salario:12000,nss:'234567890123',curp:'PELJ900215HAGLRR02',rfc:'PELJ900215YZ0',telefono:'449 100 1002',email:'',banco:'Santander',cuenta:'****5678',pid:'CF-OBR-01',activo:true,alta:'2024-10-01'},
+    {id:3,nombre:'Ana Sofía Ruiz',puesto:'Diseñadora',tipo:'Honorarios',salario:22000,nss:'',curp:'RUSA950320MAGLRR03',rfc:'RUSA950320AB0',telefono:'449 200 3003',email:'ana@diseño.mx',banco:'Banamex',cuenta:'****9012',pid:null,activo:true,alta:'2024-01-15'},
+  ],
   expenses:[
     {id:1,pid:'CF-OBR-01',cat:'Mano de obra',sid:3,amount:580000,date:'2025-02-28'},
     {id:2,pid:'CF-OBR-01',cat:'Materiales',sid:1,amount:420000,date:'2025-02-20'},
@@ -527,14 +532,14 @@ function logout(){DB.user=null;pin='';udots();$('LS').style.display='flex';$('ap
 // ═══════════════ PERMISOS POR ROL ═══════════════
 const PERMISOS = {
   1: ['dashboard','autorizaciones','crm','proyectos','cotizaciones','planproyecto','obras','bitacora','proyeccion',
-      'finanzas','compras','proveedores','partidas','cotizador','caja','documentos','portal',
-      'estadocuenta','destajos'],                                           // Miguel — todo
+      'finanzas','compras','proveedores','partidas','cotizador','cotizadorlibre','caja','documentos','portal',
+      'estadocuenta','destajos','personal'],                                 // Miguel — todo
   2: ['proyectos','cotizaciones','planproyecto','obras','bitacora',
-      'cotizador','documentos','portal'],                                   // Alejandro — Proyectos
+      'cotizador','cotizadorlibre','documentos','portal'],                   // Alejandro — Proyectos
   3: ['obras','bitacora','proyectos','proyeccion','partidas',
-      'compras','documentos','caja'],                                        // Luis — Construcción
+      'compras','documentos','caja','personal'],                              // Luis — Construcción
   4: ['dashboard','crm','proyectos','finanzas','estadocuenta',
-      'compras','proveedores','caja','documentos'],                          // Administración
+      'compras','proveedores','caja','documentos','personal'],               // Administración
 };
 
 function canSee(page){
@@ -546,11 +551,14 @@ function canSee(page){
 // Catálogo completo de items del sidebar
 const NAV_ITEMS = {
   'Principal': [
-    {p:'dashboard',   ico:'📊', lbl:'Dashboard'},
+    {p:'dashboard',      ico:'📊', lbl:'Dashboard'},
     {p:'autorizaciones', ico:'🔐', lbl:'Autorizaciones', badge:'auth_badge'},
-    {p:'crm',         ico:'🎯', lbl:'CRM · Pipeline'},
-    {p:'proyectos',   ico:'📋', lbl:'Proyectos'},
-    {p:'cotizaciones',ico:'📄', lbl:'Cotizaciones'},
+    {p:'crm',            ico:'🎯', lbl:'CRM · Pipeline'},
+    {p:'proyectos',      ico:'📋', lbl:'Proyectos'},
+    {p:'cotizaciones',   ico:'📄', lbl:'Cotizaciones'},
+  ],
+  'Personal': [
+    {p:'personal',       ico:'👷', lbl:'Personal · Nómina'},
   ],
   'Obra': [
     {p:'planproyecto',ico:'📅', lbl:'Plan de Proyecto'},
@@ -566,10 +574,11 @@ const NAV_ITEMS = {
     {p:'partidas',    ico:'📐', lbl:'Partidas'},
   ],
   'Reportes': [
-    {p:'cotizador',   ico:'🧮', lbl:'Cotizador m²'},
-    {p:'documentos',  ico:'📁', lbl:'Documentos'},
-    {p:'portal',      ico:'🌐', lbl:'Portal Cliente'},
-    {p:'estadocuenta',ico:'🏦', lbl:'Estado de Cuenta'},
+    {p:'cotizador',      ico:'🧮', lbl:'Cotizador m²'},
+    {p:'cotizadorlibre', ico:'📝', lbl:'Cotizador Libre'},
+    {p:'documentos',     ico:'📁', lbl:'Documentos'},
+    {p:'portal',         ico:'🌐', lbl:'Portal Cliente'},
+    {p:'estadocuenta',   ico:'🏦', lbl:'Estado de Cuenta'},
   ]
 };
 
@@ -601,7 +610,7 @@ function goTo(page){
   }
   document.querySelectorAll('.nv').forEach(el=>el.classList.toggle('act',el.dataset.p===page));
   $('MN').innerHTML='';
-  const map={dashboard:rDash,crm:rCRM,proyectos:rProj,cotizaciones:rCots,obras:rObras,bitacora:rBit,proyeccion:rProyeccion,finanzas:rFin,compras:rComp,proveedores:rProv,partidas:rPartidas,cotizador:rCotizador,caja:rCaja,documentos:rDocs,portal:rPortal,estadocuenta:rEstadoCuenta,planproyecto:rPlanProyecto,autorizaciones:rAutorizaciones};
+  const map={dashboard:rDash,crm:rCRM,proyectos:rProj,cotizaciones:rCots,obras:rObras,bitacora:rBit,proyeccion:rProyeccion,finanzas:rFin,compras:rComp,proveedores:rProv,partidas:rPartidas,cotizador:rCotizador,cotizadorlibre:rCotizadorLibre,caja:rCaja,documentos:rDocs,portal:rPortal,estadocuenta:rEstadoCuenta,planproyecto:rPlanProyecto,autorizaciones:rAutorizaciones,personal:rPersonal};
   if(map[page]) map[page]();
   window._currentPage = page;
   if(window.innerWidth<768){$('SB').classList.remove('open');$('OV').classList.remove('open')}
@@ -800,7 +809,10 @@ function saveP(){
 // ══════════════════════════════════════
 function rProj(){
   $('MN').innerHTML=`
-  <div class="ph3"><div><div class="pt">Proyectos</div><div class="ps">${DB.projects.length} proyectos registrados</div></div></div>
+  <div class="ph3">
+    <div><div class="pt">Proyectos</div><div class="ps">${DB.projects.length} proyectos registrados</div></div>
+    <button class="btn bp" onclick="openNuevoProyecto()">+ Nuevo Proyecto</button>
+  </div>
   ${DB.projects.map(p=>{
     const c=gC(p.cid);
     const m=p.cont>0?((p.cont-p.gast)/p.cont*100).toFixed(0):'—';
@@ -890,14 +902,93 @@ function guardarMontos(pid){
 }
 
 // ══════════════════════════════════════
+// NUEVO PROYECTO
+// ══════════════════════════════════════
+function openNuevoProyecto(){
+  om('📋 Nuevo Proyecto',`
+    <div class="fg"><div class="fl">Nombre del proyecto *</div><input class="fi" id="np_nombre" placeholder="Ej. Casa García, Remodelación López..."></div>
+    <div class="fg">
+      <div class="fl">Cliente *</div>
+      <div style="position:relative">
+        <input class="fi" id="np_c_txt" placeholder="Buscar o escribir nombre del cliente..." autocomplete="off" oninput="npFiltrarClientes(this.value)">
+        <div id="np_c_drop" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--navy);border-top:none;border-radius:0 0 8px 8px;z-index:999;max-height:160px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.12)"></div>
+      </div>
+      <input type="hidden" id="np_c_id" value="">
+    </div>
+    <div class="fr2">
+      <div class="fg"><div class="fl">Tipo</div>
+        <select class="fsl" id="np_tipo">
+          <option>Residencial</option><option>Comercial</option><option>Industrial</option><option>Remodelación</option><option>Anteproyecto</option><option>Mixto</option>
+        </select>
+      </div>
+      <div class="fg"><div class="fl">Presupuesto estimado $</div><input class="fi" id="np_presup" type="number" placeholder="0"></div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><div class="fl">Responsable</div>
+        <select class="fsl" id="np_uid">
+          ${DB.users.map(u=>`<option value="${u.id}">${u.name}</option>`).join('')}
+        </select>
+      </div>
+      <div class="fg"><div class="fl">Semáforo</div>
+        <select class="fsl" id="np_sem"><option value="green">🟢 Verde</option><option value="yellow">🟡 Amarillo</option><option value="red">🔴 Rojo</option></select>
+      </div>
+    </div>
+    <div class="fg"><div class="fl">Descripción / alcance</div><textarea class="fta" id="np_desc" placeholder="Describe el proyecto brevemente..."></textarea></div>
+  `,`<button class="btn bo" onclick="cm()">Cancelar</button><button class="btn bp" onclick="saveNuevoProyecto()">✅ Crear Proyecto</button>`);
+  setTimeout(()=>{ npFiltrarClientes(''); document.getElementById('np_nombre').focus(); },150);
+}
+function npFiltrarClientes(q){
+  var drop=document.getElementById('np_c_drop');
+  var txt=(q||'').trim().toLowerCase();
+  var filtrados=txt?DB.clients.filter(c=>c.name.toLowerCase().includes(txt)):DB.clients;
+  if(filtrados.length>0){
+    drop.style.display='block';
+    drop.innerHTML=filtrados.slice(0,8).map(c=>`<div onclick="npSelCliente(${c.id},'${c.name.replace(/'/g,"\\'")}');document.getElementById('np_c_drop').style.display='none'" style="padding:9px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--g1)" onmouseover="this.style.background='var(--g1)'" onmouseout="this.style.background='#fff'">${c.name}</div>`).join('');
+    if(txt&&!DB.clients.find(c=>c.name.toLowerCase()===txt)) drop.innerHTML+=`<div onclick="npSelNuevo(document.getElementById('np_c_txt').value)" style="padding:9px 12px;font-size:12px;cursor:pointer;color:var(--amber);font-weight:700;background:var(--abg)">✨ Crear "${q}" como nuevo cliente</div>`;
+  } else if(txt){
+    drop.style.display='block';
+    drop.innerHTML=`<div onclick="npSelNuevo(document.getElementById('np_c_txt').value)" style="padding:9px 12px;font-size:12px;cursor:pointer;color:var(--amber);font-weight:700;background:var(--abg)">✨ Crear "${q}" como nuevo cliente</div>`;
+  } else { drop.style.display='none'; }
+}
+function npSelCliente(id,name){ document.getElementById('np_c_txt').value=name; document.getElementById('np_c_id').value=id; document.getElementById('np_c_drop').style.display='none'; }
+function npSelNuevo(name){ document.getElementById('np_c_txt').value=name.trim(); document.getElementById('np_c_id').value='__nuevo__'; document.getElementById('np_c_drop').style.display='none'; }
+function saveNuevoProyecto(){
+  var nombre=(document.getElementById('np_nombre').value||'').trim();
+  if(!nombre){ alert('Ingresa el nombre del proyecto'); return; }
+  var cTxt=(document.getElementById('np_c_txt').value||'').trim();
+  if(!cTxt){ alert('Selecciona o escribe el nombre del cliente'); return; }
+  var cid=document.getElementById('np_c_id').value;
+  var clienteId;
+  if(!cid||cid==='__nuevo__'){
+    clienteId=Date.now();
+    DB.clients.push({id:clienteId,name:cTxt,email:'',phone:'',type:'EMPRESA',status:'ACTIVO'});
+    if(cid==='__nuevo__') toast('👤 Cliente "'+cTxt+'" creado');
+  } else { clienteId=parseInt(cid); }
+  var presup=parseInt(document.getElementById('np_presup').value)||0;
+  var uid=parseInt(document.getElementById('np_uid').value)||1;
+  var pid=DB.projects.length?Math.max(...DB.projects.map(p=>p.id))+1:1;
+  DB.projects.push({
+    id:pid, name:nombre, cid:clienteId, uid:uid,
+    type:document.getElementById('np_tipo').value,
+    status:'ACTIVO', prog:0, stage:'Inicio',
+    sem:document.getElementById('np_sem').value,
+    cot:presup, cont:presup, cob:0, gast:0,
+    desc:(document.getElementById('np_desc').value||''),
+    date:today()
+  });
+  cm(); rProj(); toast('✅ Proyecto "'+nombre+'" creado');
+}
+
+// ══════════════════════════════════════
 // COTIZACIONES
 // ══════════════════════════════════════
 function rCots(){
   const ap=DB.quotations.filter(q=>q.status==='APROBADA');
+  const TIPO_ICO={'Libre':'📝','Honorarios':'📐','Construcción':'🏗️','Remodelación':'🔧'};
   $('MN').innerHTML=`
   <div class="ph3">
     <div><div class="pt">Cotizaciones</div><div class="ps">${DB.quotations.length} cotizaciones</div></div>
-    <button class="btn bp" onclick="openNewCot()">+ Nueva cotización</button>
+    <button class="btn bp" onclick="rNuevaCot()">+ Nueva cotización</button>
   </div>
   <div class="kg" style="grid-template-columns:repeat(4,1fr)">
     <div class="kc"><div class="kl">Aprobadas</div><div class="kv grn">${ap.length}</div></div>
@@ -907,14 +998,15 @@ function rCots(){
   </div>
   <div class="card" style="padding:0">
     <div class="tw"><table>
-      <thead><tr><th>Cotización</th><th>Cliente / Proyecto</th><th>Total</th><th>Margen</th><th>Estado</th><th>Fecha</th><th>Acciones</th></tr></thead>
+      <thead><tr><th>Cotización</th><th>Tipo</th><th>Cliente / Proyecto</th><th>Total</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
       <tbody>${DB.quotations.map((q,i)=>{
         const c=gC(q.cid);const proj=q.pid?gP(q.pid):null;
+        const ico=TIPO_ICO[q.tipo]||'📄';
         return`<tr>
           <td><div style="font-weight:700">${q.id}</div><div class="sub">V${q.v}</div></td>
+          <td><span class="bdg bgr">${ico} ${q.tipo||'General'}</span></td>
           <td><div style="font-weight:600;font-size:12px">${(c&&c.name)}</div><div class="sub">${(proj&&proj.name)||'Sin proyecto'}</div></td>
           <td><span class="amt gd">${fmt(q.total)}</span></td>
-          <td><span class="bdg ${q.margin>15?'bgrn':q.margin>10?'bam':'brd'}">${q.margin}%</span></td>
           <td>${bd(q.status)}</td>
           <td style="font-size:12px;color:var(--g4)">${q.date}</td>
           <td style="white-space:nowrap">
@@ -925,61 +1017,400 @@ function rCots(){
     </table></div>
   </div>`;
 }
+
+// ──── EDITOR COMPLETO DE COTIZACIÓN (full-page en MN) ────
+var _cotPartidas=[]; // filas de partidas mientras se edita
+var _cotEditing=null; // null=nueva, index=edición
+
+function rNuevaCot(editIdx){
+  _cotEditing = (editIdx!=null) ? editIdx : null;
+  var q = _cotEditing!=null ? DB.quotations[_cotEditing] : null;
+  _cotPartidas = q&&q.partidas ? JSON.parse(JSON.stringify(q.partidas)) : [{id:Date.now(),concepto:'',unidad:'m²',cant:1,pu:0}];
+  var num = q ? q.id : ('COT-'+new Date().getFullYear()+'-'+String(DB.quotations.length+1).padStart(3,'0'));
+  var tipo = q ? (q.tipo||'Libre') : 'Libre';
+  var cName = q ? ((gC(q.cid)&&gC(q.cid).name)||'') : '';
+  var cId = q ? q.cid : '';
+  var desc = q ? (q.desc||'') : '';
+  var pidSel = q ? (q.pid||'') : '';
+  var condPago = q ? (q.condPago||'30% anticipo · 30% a 50% avance · 30% a 80% avance · 10% entrega') : '30% anticipo · 30% a 50% avance · 30% a 80% avance · 10% entrega';
+  var vigencia = q ? (q.vigencia||'30') : '30';
+  var conIva = q ? (q.iva||false) : false;
+  var margin = q ? (q.margin||18) : 18;
+
+  window._currentPage='cotizaciones'; // para que el back sepa a dónde volver
+
+  $('MN').innerHTML=`
+  <div style="background:var(--g1);border-radius:12px 12px 0 0;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10;border-bottom:2px solid var(--g2)">
+    <div style="display:flex;align-items:center;gap:12px">
+      <button class="btn bo bsm" onclick="rCots()">← Volver</button>
+      <div>
+        <div style="font-size:16px;font-weight:800;color:var(--navy)">${_cotEditing!=null?'Editar':'Nueva'} Cotización</div>
+        <div style="font-size:11px;color:var(--g4)">${num}</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn bo" onclick="saveCotBorrador()">💾 Borrador</button>
+      <button class="btn bp" onclick="saveCotFinal()">✅ Crear Cotización</button>
+    </div>
+  </div>
+
+  <!-- TIPO -->
+  <div class="card" style="margin-top:0;border-radius:0">
+    <div style="font-size:11px;font-weight:700;color:var(--g4);margin-bottom:10px">TIPO DE COTIZACIÓN</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap" id="cot_tipos">
+      ${['📝 Libre','📐 Honorarios','🏗️ Construcción','🔧 Remodelación'].map(t=>{
+        const k=t.split(' ').slice(1).join(' ');
+        return`<button class="btn ${k===tipo?'bp':'bo'}" id="ctipo_${k}" onclick="cotSelTipo('${k}')" style="flex:1;min-width:100px">${t}</button>`;
+      }).join('')}
+    </div>
+  </div>
+
+  <!-- DATOS GENERALES -->
+  <div class="card" style="border-radius:0">
+    <div style="font-size:11px;font-weight:700;color:var(--g4);margin-bottom:10px">DATOS GENERALES</div>
+    <div class="fr2">
+      <div class="fg">
+        <div class="fl">Cliente *</div>
+        <div style="position:relative">
+          <input class="fi" id="nc_c_txt" placeholder="Buscar o escribir cliente..." autocomplete="off" value="${cName}" oninput="ncFiltrarClientes(this.value)">
+          <div id="nc_c_drop" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--navy);border-top:none;border-radius:0 0 8px 8px;z-index:999;max-height:160px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.12)"></div>
+        </div>
+        <input type="hidden" id="nc_c_id" value="${cId}">
+        <div id="nc_nuevo_hint" style="display:none;font-size:11px;color:var(--amber);margin-top:4px;font-weight:600">✨ Se creará como nuevo cliente</div>
+      </div>
+      <div class="fg">
+        <div class="fl">Proyecto asociado</div>
+        <select class="fsl" id="nc_pid">
+          <option value="">— Sin proyecto —</option>
+          ${DB.projects.map(p=>`<option value="${p.id}" ${p.id==pidSel?'selected':''}>${p.name}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="fg"><div class="fl">Descripción / alcance del proyecto</div><textarea class="fta" id="nc_d" placeholder="Describe el alcance, ubicación, características...">${desc}</textarea></div>
+    <div class="fr2">
+      <div class="fg"><div class="fl">Margen objetivo %</div><input class="fi" id="nc_m" type="number" value="${margin}" min="0" max="50"></div>
+      <div class="fg"><div class="fl">Vigencia (días)</div>
+        <select class="fsl" id="nc_vig">
+          ${['15','30','45','60','90'].map(v=>`<option ${v==vigencia?'selected':''}>${v}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- PARTIDAS (para Libre, Construcción, Remodelación) -->
+  <div class="card" id="cot_partidas_sec" style="border-radius:0;${tipo==='Honorarios'?'display:none':''}">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <div style="font-size:11px;font-weight:700;color:var(--g4)">PARTIDAS</div>
+      <button class="btn bg bsm" onclick="cotAddPartida()">+ Agregar partida</button>
+    </div>
+    <div id="cot_partidas_tabla" style="overflow-x:auto"></div>
+    <!-- TOTALES -->
+    <div style="background:var(--g1);border-radius:8px;padding:12px;margin-top:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
+        <label style="font-size:13px;font-weight:600;cursor:pointer">
+          <input type="checkbox" id="cot_iva" ${conIva?'checked':''} onchange="cotCalcTotal()" style="margin-right:6px">
+          Incluir IVA 16%
+        </label>
+        <div></div>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:4px 0;font-size:13px">
+        <span>Subtotal</span><span id="cot_subtotal" style="font-weight:700">$0</span>
+      </div>
+      <div id="cot_iva_row" style="display:${conIva?'flex':'none'};justify-content:space-between;padding:4px 0;font-size:13px">
+        <span>IVA 16%</span><span id="cot_iva_monto" style="font-weight:700;color:var(--g4)">$0</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:2px solid var(--navy);margin-top:6px">
+        <span style="font-size:15px;font-weight:800;color:var(--navy)">TOTAL</span>
+        <span id="cot_total" style="font-size:17px;font-weight:800;color:var(--navy)">$0</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- HONORARIOS PARAMÉTRICO -->
+  <div class="card" id="cot_honor_sec" style="border-radius:0;${tipo!=='Honorarios'?'display:none':''}">
+    <div style="font-size:11px;font-weight:700;color:var(--g4);margin-bottom:10px">ESTIMACIÓN DE HONORARIOS</div>
+    <div class="fr2">
+      <div class="fg"><div class="fl">Superficie m²</div><input class="fi" id="hon_m2" type="number" placeholder="0" oninput="cotCalcHonorarios()"></div>
+      <div class="fg"><div class="fl">Tipo de construcción</div>
+        <select class="fsl" id="hon_tipo" onchange="cotCalcHonorarios()">
+          <option value="1800">Económica ($1,800/m²)</option>
+          <option value="2500" selected>Media ($2,500/m²)</option>
+          <option value="3500">Residencial ($3,500/m²)</option>
+          <option value="5000">Premium ($5,000/m²)</option>
+        </select>
+      </div>
+    </div>
+    <div class="fr2">
+      <div class="fg"><div class="fl">Fase</div>
+        <select class="fsl" id="hon_fase" onchange="cotCalcHonorarios()">
+          <option value="0.12">Anteproyecto (12%)</option>
+          <option value="0.18" selected>Proyecto Ejecutivo (18%)</option>
+          <option value="0.28">Ambas fases (28%)</option>
+        </select>
+      </div>
+      <div class="fg"><div class="fl">Total estimado</div>
+        <div id="hon_total_disp" style="font-size:20px;font-weight:800;color:var(--navy);padding:8px 0">$0</div>
+      </div>
+    </div>
+    <div id="hon_desglose" style="background:var(--g1);border-radius:8px;padding:12px;margin-top:4px;font-size:12px;line-height:2"></div>
+  </div>
+
+  <!-- CONDICIONES COMERCIALES -->
+  <div class="card" style="border-radius:0 0 12px 12px;margin-bottom:80px">
+    <div style="font-size:11px;font-weight:700;color:var(--g4);margin-bottom:10px">CONDICIONES COMERCIALES</div>
+    <div class="fg"><div class="fl">Forma de pago</div><textarea class="fta" id="nc_cond" style="min-height:56px">${condPago}</textarea></div>
+  </div>`;
+
+  // Init partidas y calcular
+  cotRenderPartidas();
+  cotCalcTotal();
+  setTimeout(()=>{ ncFiltrarClientes(''); },100);
+}
+
+function cotSelTipo(tipo){
+  ['Libre','Honorarios','Construcción','Remodelación'].forEach(t=>{
+    var btn=document.getElementById('ctipo_'+t);
+    if(btn) btn.className='btn '+(t===tipo?'bp':'bo');
+  });
+  var partSec=document.getElementById('cot_partidas_sec');
+  var honSec=document.getElementById('cot_honor_sec');
+  if(partSec) partSec.style.display=tipo==='Honorarios'?'none':'block';
+  if(honSec) honSec.style.display=tipo==='Honorarios'?'block':'none';
+  if(tipo==='Honorarios') cotCalcHonorarios();
+  else cotCalcTotal();
+}
+
+function cotGetTipo(){
+  var tipos=['Libre','Honorarios','Construcción','Remodelación'];
+  for(var t of tipos){ var b=document.getElementById('ctipo_'+t); if(b&&b.className.includes('bp')) return t; }
+  return 'Libre';
+}
+
+function cotRenderPartidas(){
+  var tbl=document.getElementById('cot_partidas_tabla');
+  if(!tbl) return;
+  tbl.innerHTML=`<table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead><tr style="background:var(--g1)">
+      <th style="padding:8px 6px;text-align:left;font-size:11px;color:var(--g4)">CONCEPTO</th>
+      <th style="padding:8px 6px;text-align:left;font-size:11px;color:var(--g4);width:70px">UNIDAD</th>
+      <th style="padding:8px 6px;text-align:right;font-size:11px;color:var(--g4);width:70px">CANT.</th>
+      <th style="padding:8px 6px;text-align:right;font-size:11px;color:var(--g4);width:100px">P.U.</th>
+      <th style="padding:8px 6px;text-align:right;font-size:11px;color:var(--g4);width:110px">SUBTOTAL</th>
+      <th style="width:32px"></th>
+    </tr></thead>
+    <tbody>
+    ${_cotPartidas.map((p,i)=>`<tr>
+      <td style="padding:4px 6px"><input class="fi" style="min-width:140px;margin:0" value="${p.concepto}" placeholder="Concepto..." oninput="_cotPartidas[${i}].concepto=this.value"></td>
+      <td style="padding:4px 6px"><input class="fi" style="width:64px;margin:0;text-align:center" value="${p.unidad}" oninput="_cotPartidas[${i}].unidad=this.value"></td>
+      <td style="padding:4px 6px"><input class="fi" style="width:64px;margin:0;text-align:right" type="number" value="${p.cant}" min="0" oninput="_cotPartidas[${i}].cant=parseFloat(this.value)||0;cotCalcTotal()"></td>
+      <td style="padding:4px 6px"><input class="fi" style="width:94px;margin:0;text-align:right" type="number" value="${p.pu}" min="0" oninput="_cotPartidas[${i}].pu=parseFloat(this.value)||0;cotCalcTotal()"></td>
+      <td style="padding:4px 6px;text-align:right;font-weight:700;color:var(--navy)">${fmt(p.cant*p.pu)}</td>
+      <td style="padding:4px 2px;text-align:center"><button onclick="cotDelPartida(${i})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;padding:2px 4px">×</button></td>
+    </tr>`).join('')}
+    </tbody>
+  </table>`;
+  cotCalcTotal();
+}
+
+function cotAddPartida(){
+  _cotPartidas.push({id:Date.now(),concepto:'',unidad:'pza',cant:1,pu:0});
+  cotRenderPartidas();
+}
+
+function cotDelPartida(i){
+  _cotPartidas.splice(i,1);
+  cotRenderPartidas();
+}
+
+function cotCalcTotal(){
+  var sub=_cotPartidas.reduce((s,p)=>s+(p.cant*p.pu),0);
+  var ivaChk=document.getElementById('cot_iva');
+  var conIva=ivaChk&&ivaChk.checked;
+  var iva=conIva?sub*.16:0;
+  var total=sub+iva;
+  var sEl=document.getElementById('cot_subtotal');
+  var tEl=document.getElementById('cot_total');
+  var ivaRow=document.getElementById('cot_iva_row');
+  var ivaMonto=document.getElementById('cot_iva_monto');
+  if(sEl) sEl.textContent=fmt(sub);
+  if(tEl) tEl.textContent=fmt(total);
+  if(ivaRow) ivaRow.style.display=conIva?'flex':'none';
+  if(ivaMonto) ivaMonto.textContent=fmt(iva);
+  // Actualizar subtotales en tabla
+  var tds=document.querySelectorAll('#cot_partidas_tabla tbody tr td:nth-child(5)');
+  _cotPartidas.forEach((p,i)=>{ if(tds[i]) tds[i].textContent=fmt(p.cant*p.pu); });
+}
+
+function cotCalcHonorarios(){
+  var m2=parseFloat(document.getElementById('hon_m2').value)||0;
+  var pxm2=parseFloat(document.getElementById('hon_tipo').value)||2500;
+  var pct=parseFloat(document.getElementById('hon_fase').value)||0.18;
+  var valor=m2*pxm2;
+  var hons=valor*pct;
+  var ivaMonto=hons*.16;
+  var total=hons+ivaMonto;
+  var disp=document.getElementById('hon_total_disp');
+  var des=document.getElementById('hon_desglose');
+  if(disp) disp.textContent=fmt(total);
+  if(des) des.innerHTML=`Valor estimado de obra: <strong>${fmt(valor)}</strong><br>Honorarios (${(pct*100).toFixed(0)}%): <strong>${fmt(hons)}</strong><br>IVA 16%: <strong>${fmt(ivaMonto)}</strong><br><strong style="color:var(--navy)">Total honorarios: ${fmt(total)}</strong>`;
+}
+
+function _cotGetTotal(){
+  var tipo=cotGetTipo();
+  if(tipo==='Honorarios'){
+    var m2=parseFloat(document.getElementById('hon_m2').value)||0;
+    var pxm2=parseFloat(document.getElementById('hon_tipo').value)||2500;
+    var pct=parseFloat(document.getElementById('hon_fase').value)||0.18;
+    return Math.round(m2*pxm2*pct*1.16);
+  }
+  var sub=_cotPartidas.reduce((s,p)=>s+(p.cant*p.pu),0);
+  var ivaChk=document.getElementById('cot_iva');
+  var conIva=ivaChk&&ivaChk.checked;
+  return Math.round(sub+(conIva?sub*.16:0));
+}
+
+function saveCotBorrador(){ _doSaveCot('BORRADOR'); }
+function saveCotFinal(){ _doSaveCot('BORRADOR'); }
+
+function _doSaveCot(status){
+  var nombre=(document.getElementById('nc_c_txt').value||'').trim();
+  if(!nombre){ alert('Escribe el nombre del cliente'); return; }
+  var cid=document.getElementById('nc_c_id').value;
+  var clienteId;
+  if(!cid||cid==='__nuevo__'){
+    clienteId=Date.now();
+    DB.clients.push({id:clienteId,name:nombre,email:'',phone:'',type:'EMPRESA',status:'ACTIVO'});
+    if(cid==='__nuevo__') toast('👤 Nuevo cliente "'+nombre+'" creado');
+  } else { clienteId=parseInt(cid); }
+
+  var tipo=cotGetTipo();
+  var total=_cotGetTotal();
+  var ivaChk=document.getElementById('cot_iva');
+  var pidEl=document.getElementById('nc_pid');
+  var pidVal=pidEl?parseInt(pidEl.value)||null:null;
+  var margin=parseFloat(document.getElementById('nc_m').value)||18;
+  var vigencia=document.getElementById('nc_vig').value||'30';
+  var condPago=document.getElementById('nc_cond').value||'';
+
+  var num='COT-'+new Date().getFullYear()+'-'+String(DB.quotations.length+1).padStart(3,'0');
+
+  var cotObj={
+    id: num, pid: pidVal, cid: clienteId, v:1, status:status,
+    tipo: tipo, total: total, margin: margin,
+    date: today(), desc: (document.getElementById('nc_d').value||''),
+    iva: ivaChk?ivaChk.checked:false,
+    vigencia: vigencia, condPago: condPago,
+    partidas: tipo!=='Honorarios' ? JSON.parse(JSON.stringify(_cotPartidas)) : []
+  };
+
+  if(_cotEditing!=null){
+    cotObj.id=DB.quotations[_cotEditing].id;
+    cotObj.v=(DB.quotations[_cotEditing].v||1)+1;
+    DB.quotations[_cotEditing]=cotObj;
+    toast('✅ Cotización actualizada');
+  } else {
+    DB.quotations.unshift(cotObj);
+    toast('✅ Cotización '+num+' creada');
+  }
+  rCots();
+}
+
+// Mantener saveCot para compatibilidad
+function saveCot(){ _doSaveCot('BORRADOR'); }
+
+function openNewCot(){ rNuevaCot(); }
+
+function ncFiltrarClientes(q){
+  var drop=document.getElementById('nc_c_drop');
+  if(!drop) return;
+  var hint=document.getElementById('nc_nuevo_hint');
+  var hidId=document.getElementById('nc_c_id');
+  var txt=(q||'').trim().toLowerCase();
+  var filtrados=txt?DB.clients.filter(c=>c.name.toLowerCase().includes(txt)):DB.clients;
+  if(filtrados.length>0){
+    drop.style.display='block';
+    drop.innerHTML=filtrados.slice(0,8).map(c=>`<div onclick="ncSelCliente(${c.id},'${c.name.replace(/'/g,"\'")}');document.getElementById('nc_c_drop').style.display='none'" style="padding:9px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--g1)" onmouseover="this.style.background='var(--g1)'" onmouseout="this.style.background='#fff'">${c.name}</div>`).join('');
+    if(txt&&!DB.clients.find(c=>c.name.toLowerCase()===txt)) drop.innerHTML+=`<div onclick="ncSelNuevo(document.getElementById('nc_c_txt').value)" style="padding:9px 12px;font-size:12px;cursor:pointer;color:var(--amber);font-weight:700;background:var(--abg)">✨ Crear "${q}" como nuevo cliente</div>`;
+  } else if(txt){
+    drop.style.display='block';
+    drop.innerHTML=`<div onclick="ncSelNuevo(document.getElementById('nc_c_txt').value)" style="padding:9px 12px;font-size:12px;cursor:pointer;color:var(--amber);font-weight:700;background:var(--abg)">✨ Crear "${q}" como nuevo cliente</div>`;
+  } else { drop.style.display='none'; }
+}
+function ncSelCliente(id,name){ document.getElementById('nc_c_txt').value=name; document.getElementById('nc_c_id').value=id; document.getElementById('nc_c_drop').style.display='none'; if(document.getElementById('nc_nuevo_hint')) document.getElementById('nc_nuevo_hint').style.display='none'; }
+function ncSelNuevo(name){ document.getElementById('nc_c_txt').value=name.trim(); document.getElementById('nc_c_id').value='__nuevo__'; document.getElementById('nc_c_drop').style.display='none'; if(document.getElementById('nc_nuevo_hint')){ document.getElementById('nc_nuevo_hint').style.display='block'; document.getElementById('nc_nuevo_hint').textContent='✨ Se creará "'+name.trim()+'" como nuevo cliente'; } }
+
 function openCotD(i){
-  const q=DB.quotations[i];const c=gC(q.cid);const proj=q.pid?gP(q.pid):null;
-  const sub=q.total/1.16;const mat=sub*.45;const mo=sub*.30;const ind=sub*.12;const util=sub*(q.margin/100);
-  om(`Cotización ${q.id}`,`
-    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">${bd(q.status)}<span class="bdg bgr">Versión ${q.v}</span></div>
+  const q=DB.quotations[i]; const c=gC(q.cid); const proj=q.pid?gP(q.pid):null;
+  const TIPO_ICO={'Libre':'📝','Honorarios':'📐','Construcción':'🏗️','Remodelación':'🔧'};
+  const ico=TIPO_ICO[q.tipo]||'📄';
+  const hasPartidas=q.partidas&&q.partidas.length>0;
+  const sub=hasPartidas?q.partidas.reduce((s,p)=>s+(p.cant*p.pu),0):Math.round(q.total/1.16);
+  om(`${ico} ${q.id}`,`
+    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">${bd(q.status)}<span class="bdg bgr">${q.tipo||'General'}</span><span class="bdg bgr">V${q.v}</span></div>
     <div class="fr2" style="margin-bottom:12px">
       <div><div class="fl">Cliente</div><div style="font-weight:700">${(c&&c.name)}</div></div>
       <div><div class="fl">Proyecto</div><div style="font-weight:700">${(proj&&proj.name)||'Sin proyecto'}</div></div>
     </div>
-    <div style="background:var(--g1);border-radius:8px;padding:14px;margin-bottom:12px">
-      <div style="font-size:11px;font-weight:700;color:var(--g4);margin-bottom:8px">DESGLOSE FINANCIERO</div>
-      ${[['Materiales',mat,''],['Mano de obra',mo,''],['Indirectos (12%)',ind,''],['Utilidad ('+q.margin+'%)',util,'gd']].map(([l,v,cl])=>`
-      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--g2)">
-        <span style="font-size:13px">${l}</span><span class="amt ${cl}">${fmt(v)}</span>
-      </div>`).join('')}
-      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--g2)"><span>Subtotal</span><span style="font-weight:700">${fmt(sub)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--g2)"><span>IVA 16%</span><span style="font-weight:700">${fmt(q.total-sub)}</span></div>
-      <div style="display:flex;justify-content:space-between;padding:8px 0;margin-top:4px"><span style="font-size:15px;font-weight:800;color:var(--navy)">TOTAL</span><span style="font-size:17px;font-weight:800;color:var(--navy)">${fmt(q.total)}</span></div>
+    ${hasPartidas?`
+    <div style="font-size:11px;font-weight:700;color:var(--g4);margin-bottom:6px">PARTIDAS</div>
+    <div style="overflow-x:auto;margin-bottom:12px">
+    <table style="width:100%;border-collapse:collapse;font-size:12px">
+      <thead><tr style="background:var(--g1)">
+        <th style="padding:6px 8px;text-align:left">Concepto</th>
+        <th style="padding:6px 8px;text-align:center">Unidad</th>
+        <th style="padding:6px 8px;text-align:right">Cant.</th>
+        <th style="padding:6px 8px;text-align:right">P.U.</th>
+        <th style="padding:6px 8px;text-align:right">Subtotal</th>
+      </tr></thead>
+      <tbody>${q.partidas.map(p=>`<tr style="border-bottom:1px solid var(--g1)"><td style="padding:5px 8px">${p.concepto||'—'}</td><td style="padding:5px 8px;text-align:center">${p.unidad}</td><td style="padding:5px 8px;text-align:right">${p.cant}</td><td style="padding:5px 8px;text-align:right">${fmt(p.pu)}</td><td style="padding:5px 8px;text-align:right;font-weight:700">${fmt(p.cant*p.pu)}</td></tr>`).join('')}</tbody>
+    </table></div>`:
+    `<div style="background:var(--g1);border-radius:8px;padding:14px;margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:var(--g4);margin-bottom:8px">DESGLOSE</div>
+    ${[['Materiales',sub*.45],['Mano de obra',sub*.30],['Indirectos 12%',sub*.12],['Utilidad '+q.margin+'%',sub*(q.margin/100)]].map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--g2);font-size:12px"><span>${l}</span><span>${fmt(v)}</span></div>`).join('')}</div>`}
+    <div style="background:var(--g1);border-radius:8px;padding:12px;margin-bottom:10px">
+      <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>Subtotal</span><span style="font-weight:700">${fmt(sub)}</span></div>
+      ${q.iva?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>IVA 16%</span><span style="font-weight:700">${fmt(sub*.16)}</span></div>`:''}
+      <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:2px solid var(--navy);margin-top:6px">
+        <span style="font-size:15px;font-weight:800;color:var(--navy)">TOTAL</span>
+        <span style="font-size:17px;font-weight:800;color:var(--navy)">${fmt(q.total)}</span>
+      </div>
     </div>
-    ${q.status!=='APROBADA'?`<div class="fg"><div class="fl">Cambiar estado</div>
+    ${q.status!=='APROBADA'?`<div class="fg"><div class="fl">Estado</div>
       <select class="fsl" onchange="DB.quotations[${i}].status=this.value">
         ${['BORRADOR','EN REVISIÓN','ENVIADA','EN NEGOCIACIÓN','APROBADA','RECHAZADA'].map(s=>`<option ${s===q.status?'selected':''}>${s}</option>`).join('')}
       </select></div>`:''}`,
     `<button class="btn bo" onclick="cm()">Cerrar</button>
+     <button class="btn bo" onclick="cm();rNuevaCot(${i})">✏️ Editar</button>
      <button class="btn bo" onclick="pdfCot(${i})">📥 PDF</button>
-     ${q.status!=='APROBADA'?`<button class="btn bg" onclick="DB.quotations[${i}].status='APROBADA';cm();rCots();toast('✅ Cotización aprobada')">Aprobar</button>`:`<button class="btn bp" disabled>✅ Aprobada</button>`}`
+     ${q.status!=='APROBADA'?`<button class="btn bg" onclick="DB.quotations[${i}].status='APROBADA';cm();rCots();toast('✅ Cotización aprobada')">Aprobar</button>`:`<button class="btn bp" onclick="cm();cotCrearProyecto(${i})">📋 Crear Proyecto</button>`}`
   );
 }
+
+function cotCrearProyecto(i){
+  var q=DB.quotations[i]; var c=gC(q.cid);
+  var pid=DB.projects.length?Math.max(...DB.projects.map(p=>p.id))+1:1;
+  DB.projects.push({id:pid,name:q.desc||q.id,cid:q.cid,uid:1,type:q.tipo||'General',status:'ACTIVO',prog:0,stage:'Inicio',sem:'green',cot:q.total,cont:q.total,cob:0,gast:0,date:today()});
+  DB.quotations[i].pid=pid;
+  toast('✅ Proyecto creado desde cotización');
+  goTo('planproyecto');
+}
+
 function pdfCot(i){
-  const q=DB.quotations[i];const c=gC(q.cid);
-  const sub=Math.round(q.total/1.16);
+  const q=DB.quotations[i]; const c=gC(q.cid); const proj=q.pid?gP(q.pid):null;
+  const hasPartidas=q.partidas&&q.partidas.length>0;
+  const sub=hasPartidas?q.partidas.reduce((s,p)=>s+(p.cant*p.pu),0):Math.round(q.total/1.16);
+  const TIPO_ICO={'Libre':'📝','Honorarios':'📐','Construcción':'🏗️','Remodelación':'🔧'};
   const w=window.open('','_blank');
-  w.document.write(`<!DOCTYPE html><html><head><title>${q.id}</title>
-  <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:13px;color:#333;padding:36px;max-width:700px;margin:0 auto}
-  .hd{display:flex;justify-content:space-between;padding-bottom:16px;border-bottom:3px solid #1B3A5C;margin-bottom:20px}
-  .logoimg{height:52px;border-radius:4px}
-  h2{font-size:15px;color:#1B3A5C;margin:18px 0 8px;border-bottom:1px solid #eee;padding-bottom:5px}
-  table{width:100%;border-collapse:collapse;margin-bottom:14px}
-  th{background:#1B3A5C;color:#fff;padding:8px 10px;text-align:left;font-size:12px}
-  td{padding:7px 10px;border-bottom:1px solid #eee;font-size:13px}
-  tr:nth-child(even) td{background:#f9f9f9}
-  .tot td{font-weight:800;font-size:15px;border-top:2px solid #1B3A5C}
-  .ib{background:#f5f7fa;border-radius:6px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.8}
-  .ft{margin-top:36px;padding-top:16px;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center}
-  @media print{body{padding:20px}}</style></head><body>
-  <div class="hd">
-    <div><div class="logo">VAARQ<span>·</span>ERP</div><div style="font-size:11px;color:#666;margin-top:3px">Villarreal Arquitectura · Constructora Villarreal</div></div>
-    <div style="text-align:right"><div style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:3px">Propuesta económica</div><div style="font-size:20px;font-weight:800;color:#1B3A5C">${q.id}</div><div style="font-size:11px;color:#666">Versión ${q.v} · ${q.date}</div></div>
-  </div>
-  <div class="ib">
-    <strong style="font-size:14px;color:#1B3A5C">Propuesta para: ${(c&&c.name)}</strong><br>
-    Contacto: ${(c&&c.contact)} &nbsp;·&nbsp; ${(c&&c.email)} &nbsp;·&nbsp; ${(c&&c.phone)}<br>
-    Vigencia: 30 días naturales a partir de la fecha de emisión
-  </div>
-  <h2>Desglose de la propuesta</h2>
+  const partidasHtml=hasPartidas?`
+  <h2>Desglose de partidas</h2>
+  <table>
+    <thead><tr><th>Concepto</th><th style="text-align:center">Unidad</th><th style="text-align:right">Cant.</th><th style="text-align:right">P.U.</th><th style="text-align:right">Subtotal</th></tr></thead>
+    <tbody>
+    ${q.partidas.map(p=>`<tr><td>${p.concepto||'—'}</td><td style="text-align:center">${p.unidad}</td><td style="text-align:right">${p.cant}</td><td style="text-align:right">$${p.pu.toLocaleString('es-MX')}</td><td style="text-align:right">$${(p.cant*p.pu).toLocaleString('es-MX')}</td></tr>`).join('')}
+    ${q.iva?`<tr><td colspan="4" style="text-align:right">IVA 16%</td><td style="text-align:right">$${Math.round(sub*.16).toLocaleString('es-MX')}</td></tr>`:''}
+    <tr class="tot"><td colspan="4">TOTAL</td><td style="text-align:right;color:#1B3A5C">$${q.total.toLocaleString('es-MX')}</td></tr>
+    </tbody>
+  </table>`:
+  `<h2>Desglose de la propuesta</h2>
   <table>
     <thead><tr><th>Concepto</th><th style="text-align:right">Monto</th></tr></thead>
     <tbody>
@@ -991,11 +1422,40 @@ function pdfCot(i){
       <tr><td>IVA 16%</td><td style="text-align:right">$${Math.round(q.total-sub).toLocaleString('es-MX')}</td></tr>
       <tr class="tot"><td>TOTAL</td><td style="text-align:right;color:#1B3A5C;font-size:17px">$${q.total.toLocaleString('es-MX')}</td></tr>
     </tbody>
-  </table>
+  </table>`;
+
+  w.document.write(`<!DOCTYPE html><html><head><title>${q.id}</title>
+  <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:13px;color:#333;padding:36px;max-width:740px;margin:0 auto}
+  .hd{display:flex;justify-content:space-between;padding-bottom:16px;border-bottom:3px solid #1B3A5C;margin-bottom:20px}
+  .logoimg{height:52px;border-radius:4px}
+  h2{font-size:14px;color:#1B3A5C;margin:18px 0 8px;border-bottom:1px solid #eee;padding-bottom:5px}
+  table{width:100%;border-collapse:collapse;margin-bottom:14px}
+  th{background:#1B3A5C;color:#fff;padding:8px 10px;text-align:left;font-size:11px}
+  td{padding:7px 10px;border-bottom:1px solid #eee;font-size:12px}
+  tr:nth-child(even) td{background:#f9f9f9}
+  .tot td{font-weight:800;font-size:14px;border-top:2px solid #1B3A5C;background:#f0f4f8}
+  .ib{background:#f5f7fa;border-radius:6px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.9}
+  .ft{margin-top:36px;padding-top:16px;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center}
+  @media print{body{padding:20px}}</style></head><body>
+  <div class="hd">
+    <div><img src="${LOGO_B64}" class="logoimg" onerror="this.style.display='none'"><div style="font-size:11px;color:#666;margin-top:3px">Villarreal Arquitectura · Constructora Villarreal</div></div>
+    <div style="text-align:right">
+      <div style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:3px">${TIPO_ICO[q.tipo]||'📄'} Propuesta ${q.tipo||'económica'}</div>
+      <div style="font-size:20px;font-weight:800;color:#1B3A5C">${q.id}</div>
+      <div style="font-size:11px;color:#666">Versión ${q.v} · ${q.date}</div>
+    </div>
+  </div>
+  <div class="ib">
+    <strong style="font-size:14px;color:#1B3A5C">Propuesta para: ${(c&&c.name)||'—'}</strong><br>
+    ${(c&&c.contact)?'Contacto: '+c.contact+' &nbsp;·&nbsp; ':''} ${(c&&c.email)||''} ${(c&&c.phone)?'&nbsp;·&nbsp; '+c.phone:''}<br>
+    ${proj?'Proyecto: <strong>'+proj.name+'</strong><br>':''}
+    Vigencia: ${q.vigencia||30} días naturales · Fecha de emisión: ${q.date}
+  </div>
+  ${q.desc?`<div class="ib"><strong>Alcance:</strong> ${q.desc}</div>`:''}
+  ${partidasHtml}
   <h2>Condiciones comerciales</h2>
   <div class="ib">
-    <strong>Forma de pago:</strong> 30% anticipo · 30% al 50% de avance · 30% al 80% · 10% a la entrega<br>
-    <strong>Tiempo de ejecución:</strong> Según programa de obra acordado con el cliente<br>
+    <strong>Forma de pago:</strong> ${q.condPago||'30% anticipo · 30% al 50% de avance · 30% al 80% · 10% a la entrega'}<br>
     <strong>Exclusiones:</strong> Trámites y permisos municipales · Mobiliario y equipamiento · Conexiones definitivas de servicios
   </div>
   <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:50px">
@@ -1004,119 +1464,8 @@ function pdfCot(i){
   </div>
   <div class="ft">Villarreal Arquitectura · arquitectura atemporal ® · contacto@vaarq.mx · Aguascalientes, México</div>
   <script>window.onload=()=>window.print()<\/script>
-
-
 </body></html>`);
   w.document.close();
-}
-function openNewCot(){
-  om('Nueva cotización',`
-    <div class="fg">
-      <div class="fl">Cliente *</div>
-      <div style="position:relative">
-        <input class="fi" id="nc_c_txt" placeholder="Buscar o escribir nombre..." autocomplete="off"
-          oninput="ncFiltrarClientes(this.value)"
-          style="padding-right:36px">
-        <div id="nc_c_drop" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--navy);border-top:none;border-radius:0 0 8px 8px;z-index:999;max-height:160px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.12)"></div>
-      </div>
-      <div id="nc_nuevo_hint" style="display:none;font-size:11px;color:var(--amber);margin-top:4px;font-weight:600">
-        ✨ Se creará un nuevo cliente con este nombre
-      </div>
-      <input type="hidden" id="nc_c_id" value="">
-    </div>
-    <div class="fr2">
-      <div class="fg"><div class="fl">Total estimado *</div><input class="fi" id="nc_t" type="number" placeholder="0"></div>
-      <div class="fg"><div class="fl">Margen objetivo %</div><input class="fi" id="nc_m" type="number" value="18"></div>
-    </div>
-    <div class="fg"><div class="fl">Descripción / alcance</div><textarea class="fta" id="nc_d" placeholder="Alcance del proyecto..."></textarea></div>`,
-    `<button class="btn bo" onclick="cm()">Cancelar</button><button class="btn bp" onclick="saveCot()">Crear cotización</button>`
-  );
-  // Trigger initial list
-  setTimeout(()=>{ ncFiltrarClientes(''); document.getElementById('nc_c_txt').focus(); }, 150);
-}
-
-function ncFiltrarClientes(q){
-  var drop = document.getElementById('nc_c_drop');
-  var hint = document.getElementById('nc_nuevo_hint');
-  var hidId = document.getElementById('nc_c_id');
-  var txt = (q||'').trim().toLowerCase();
-
-  // Filter existing clients
-  var filtrados = txt ? DB.clients.filter(c=>c.name.toLowerCase().includes(txt)) : DB.clients;
-
-  if(filtrados.length > 0){
-    drop.style.display = 'block';
-    drop.innerHTML = filtrados.slice(0,8).map(c=>
-      `<div onclick="ncSelCliente(${c.id},'${c.name.replace(/'/g,"\'")}');this.closest('[id]').style.display='none'"
-        style="padding:9px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--g1)"
-        onmouseover="this.style.background='var(--g1)'" onmouseout="this.style.background='#fff'">
-        ${c.name}
-      </div>`
-    ).join('');
-    if(txt) {
-      // Show "create new" option at bottom if no exact match
-      var exacto = DB.clients.find(c=>c.name.toLowerCase()===txt);
-      if(!exacto){
-        drop.innerHTML += `<div onclick="ncSelNuevo(document.getElementById('nc_c_txt').value)"
-          style="padding:9px 12px;font-size:12px;cursor:pointer;color:var(--amber);font-weight:700;background:var(--abg)"
-          onmouseover="this.style.opacity='.8'" onmouseout="this.style.opacity='1'">
-          ✨ Crear "${document.getElementById('nc_c_txt').value}" como nuevo cliente
-        </div>`;
-        hint.style.display = 'none';
-        hidId.value = '';
-      }
-    }
-  } else if(txt) {
-    drop.style.display = 'block';
-    drop.innerHTML = `<div onclick="ncSelNuevo(document.getElementById('nc_c_txt').value)"
-      style="padding:9px 12px;font-size:12px;cursor:pointer;color:var(--amber);font-weight:700;background:var(--abg)">
-      ✨ Crear "${q}" como nuevo cliente
-    </div>`;
-    hint.style.display = 'block';
-    hidId.value = '';
-  } else {
-    drop.style.display = 'none';
-    hint.style.display = 'none';
-  }
-}
-
-function ncSelCliente(id, name){
-  document.getElementById('nc_c_txt').value = name;
-  document.getElementById('nc_c_id').value = id;
-  document.getElementById('nc_c_drop').style.display = 'none';
-  document.getElementById('nc_nuevo_hint').style.display = 'none';
-}
-
-function ncSelNuevo(name){
-  document.getElementById('nc_c_txt').value = name.trim();
-  document.getElementById('nc_c_id').value = '__nuevo__';
-  document.getElementById('nc_c_drop').style.display = 'none';
-  document.getElementById('nc_nuevo_hint').style.display = 'block';
-  document.getElementById('nc_nuevo_hint').textContent = '✨ Se creará "' + name.trim() + '" como nuevo cliente';
-}
-
-function saveCot(){
-  var t = parseInt($('nc_t').value)||0;
-  if(!t){ alert('Ingresa el monto'); return; }
-  var nombre = ($('nc_c_txt').value||'').trim();
-  if(!nombre){ alert('Escribe el nombre del cliente'); return; }
-  var cid = $('nc_c_id').value;
-  var clienteId;
-  if(!cid || cid === '__nuevo__'){
-    // Create new client
-    clienteId = Date.now();
-    DB.clients.push({ id: clienteId, name: nombre, email:'', phone:'', type:'EMPRESA', status:'ACTIVO' });
-    if(cid==='__nuevo__') toast('👤 Nuevo cliente "'+nombre+'" creado');
-  } else {
-    clienteId = parseInt(cid);
-  }
-  var num = 'COT-2025-' + String(DB.quotations.length+1).padStart(3,'0');
-  DB.quotations.unshift({
-    id: num, pid: null, cid: clienteId, v:1, status:'BORRADOR',
-    total: t, margin: parseFloat($('nc_m').value)||18,
-    date: today(), desc: $('nc_d').value||''
-  });
-  cm(); rCots(); toast('✅ Cotización ' + num + ' creada');
 }
 
 // ══════════════════════════════════════
@@ -4463,6 +4812,562 @@ function ecExportar(){
 }
 </script>
 <!-- ═══════════════ FIN ESTADO DE CUENTA ═══════════════ -->
+
+<!-- ═══════════════ PERSONAL / NÓMINA ═══════════════ -->
+<script>
+var _persModal = null;
+var _persEditing = null;
+
+function rPersonal(){
+  var user = DB.users.find(u=>u.id===CUR_USER);
+  var obras = DB.works || [];
+  var personal = DB.personal || [];
+
+  $('MN').innerHTML=`
+  <div class="ph3">
+    <div>
+      <div class="pt">👷 Personal · Nómina</div>
+      <div class="ps">Gestión de empleados, contratistas y nómina del despacho</div>
+    </div>
+    <button class="btn bp" onclick="persAbrirModal(null)" style="flex-shrink:0">+ Nuevo empleado</button>
+  </div>
+
+  <!-- FILTROS -->
+  <div class="card" style="padding:12px 16px;display:flex;gap:10px;flex-wrap:wrap;align-items:center">
+    <select id="pers-fil-tipo" onchange="persFiltrar()" style="border:1px solid var(--g2);border-radius:8px;padding:7px 10px;font-size:12px;background:#fff;color:var(--navy)">
+      <option value="">Todos los tipos</option>
+      <option value="Nómina">Nómina</option>
+      <option value="Destajo">Destajo</option>
+      <option value="Honorarios">Honorarios</option>
+    </select>
+    <select id="pers-fil-obra" onchange="persFiltrar()" style="border:1px solid var(--g2);border-radius:8px;padding:7px 10px;font-size:12px;background:#fff;color:var(--navy)">
+      <option value="">Todas las obras</option>
+      ${obras.map(o=>`<option value="${o.id}">${o.name}</option>`).join('')}
+      <option value="despacho">Despacho (sin obra)</option>
+    </select>
+    <select id="pers-fil-estatus" onchange="persFiltrar()" style="border:1px solid var(--g2);border-radius:8px;padding:7px 10px;font-size:12px;background:#fff;color:var(--navy)">
+      <option value="activo">Activos</option>
+      <option value="inactivo">Inactivos</option>
+      <option value="">Todos</option>
+    </select>
+    <input id="pers-fil-buscar" placeholder="🔍 Buscar por nombre…" oninput="persFiltrar()" style="border:1px solid var(--g2);border-radius:8px;padding:7px 10px;font-size:12px;flex:1;min-width:140px;outline:none">
+  </div>
+
+  <!-- KPIs -->
+  <div class="g4c" id="pers-kpis" style="gap:10px"></div>
+
+  <!-- TABLA -->
+  <div class="card" style="padding:0;overflow:hidden">
+    <div id="pers-tabla" style="overflow-x:auto"></div>
+  </div>
+
+  <!-- MODAL -->
+  <div id="pers-modal" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);z-index:2000;overflow-y:auto;padding:20px 10px">
+    <div style="background:#fff;border-radius:16px;max-width:560px;margin:0 auto;overflow:hidden;box-shadow:0 8px 40px rgba(0,0,0,.3)">
+      <div style="background:linear-gradient(135deg,var(--navy),#2a5a8c);padding:18px 20px;display:flex;align-items:center;justify-content:space-between">
+        <div style="color:#fff;font-weight:700;font-size:15px" id="pers-modal-title">Nuevo empleado</div>
+        <button onclick="persCerrarModal()" style="background:none;border:none;color:#fff;font-size:22px;cursor:pointer;line-height:1;opacity:.8">×</button>
+      </div>
+      <div id="pers-modal-body" style="padding:20px"></div>
+    </div>
+  </div>
+  `;
+
+  persRenderKPIs();
+  persFiltrar();
+}
+
+function persRenderKPIs(){
+  var p = DB.personal || [];
+  var activos = p.filter(x=>x.activo);
+  var nomina  = activos.filter(x=>x.tipo==='Nómina');
+  var destajo = activos.filter(x=>x.tipo==='Destajo');
+  var honor   = activos.filter(x=>x.tipo==='Honorarios');
+  var nomMes  = nomina.reduce((a,x)=>a+(x.salario||0),0);
+  var el = document.getElementById('pers-kpis');
+  if(!el) return;
+  el.innerHTML=`
+    <div class="card" style="padding:14px 16px;text-align:center">
+      <div style="font-size:26px;font-weight:800;color:var(--navy)">${activos.length}</div>
+      <div style="font-size:11px;color:var(--g4);font-weight:600;margin-top:2px">ACTIVOS</div>
+    </div>
+    <div class="card" style="padding:14px 16px;text-align:center">
+      <div style="font-size:26px;font-weight:800;color:var(--navy)">${nomina.length}</div>
+      <div style="font-size:11px;color:var(--g4);font-weight:600;margin-top:2px">NÓMINA</div>
+    </div>
+    <div class="card" style="padding:14px 16px;text-align:center">
+      <div style="font-size:26px;font-weight:800;color:var(--navy)">${destajo.length + honor.length}</div>
+      <div style="font-size:11px;color:var(--g4);font-weight:600;margin-top:2px">DESTAJO / HON.</div>
+    </div>
+    <div class="card" style="padding:14px 16px;text-align:center">
+      <div style="font-size:22px;font-weight:800;color:var(--green)">${fmt(nomMes)}</div>
+      <div style="font-size:11px;color:var(--g4);font-weight:600;margin-top:2px">NÓM. MENSUAL</div>
+    </div>
+  `;
+}
+
+function persFiltrar(){
+  var tipo    = (document.getElementById('pers-fil-tipo')||{}).value||'';
+  var obra    = (document.getElementById('pers-fil-obra')||{}).value||'';
+  var estatus = (document.getElementById('pers-fil-estatus')||{}).value;
+  var buscar  = ((document.getElementById('pers-fil-buscar')||{}).value||'').toLowerCase();
+
+  var lista = (DB.personal||[]).filter(p=>{
+    if(tipo && p.tipo !== tipo) return false;
+    if(obra === 'despacho' && p.pid) return false;
+    if(obra && obra !== 'despacho' && String(p.pid) !== String(obra)) return false;
+    if(estatus === 'activo'  && !p.activo) return false;
+    if(estatus === 'inactivo' && p.activo) return false;
+    if(buscar && !p.nombre.toLowerCase().includes(buscar) && !(p.puesto||'').toLowerCase().includes(buscar)) return false;
+    return true;
+  });
+
+  var obras = DB.works || [];
+  var el = document.getElementById('pers-tabla');
+  if(!el) return;
+
+  if(!lista.length){
+    el.innerHTML='<div style="padding:40px;text-align:center;color:var(--g4)">Sin resultados</div>';
+    return;
+  }
+
+  var badge={
+    'Nómina':'background:#e8f5e9;color:#2e7d32',
+    'Destajo':'background:#fff8e1;color:#f57f17',
+    'Honorarios':'background:#e8eaf6;color:#3949ab'
+  };
+
+  el.innerHTML=`
+  <table style="width:100%;border-collapse:collapse;font-size:13px">
+    <thead>
+      <tr style="background:var(--g1)">
+        <th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--g4);font-weight:700">NOMBRE</th>
+        <th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--g4);font-weight:700">PUESTO</th>
+        <th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--g4);font-weight:700">TIPO</th>
+        <th style="padding:10px 14px;text-align:right;font-size:11px;color:var(--g4);font-weight:700">SALARIO</th>
+        <th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--g4);font-weight:700">OBRA</th>
+        <th style="padding:10px 14px;text-align:center;font-size:11px;color:var(--g4);font-weight:700">ACCIONES</th>
+      </tr>
+    </thead>
+    <tbody>
+      ${lista.map(p=>{
+        var obraName = p.pid ? (obras.find(o=>o.id==p.pid)||{name:p.pid}).name : '— Despacho —';
+        var salLabel = p.tipo === 'Nómina' ? fmt(p.salario||0)+'/mes' : p.tipo === 'Destajo' ? fmt(p.salario||0)+'/dest.' : fmt(p.salario||0)+'/mes';
+        var est = p.activo ? '<span style="color:var(--green);font-weight:700">● Activo</span>' : '<span style="color:var(--g3);font-weight:700">● Inactivo</span>';
+        return `
+        <tr style="border-top:1px solid var(--g1);cursor:pointer" onclick="persAbrirModal(${p.id})">
+          <td style="padding:11px 14px">
+            <div style="font-weight:700;color:var(--navy)">${p.nombre}</div>
+            <div style="font-size:11px;color:var(--g4);margin-top:1px">${est}</div>
+          </td>
+          <td style="padding:11px 14px;color:var(--g4)">${p.puesto||'—'}</td>
+          <td style="padding:11px 14px;text-align:center"><span style="padding:3px 9px;border-radius:20px;font-size:11px;font-weight:700;${badge[p.tipo]||''}">${p.tipo}</span></td>
+          <td style="padding:11px 14px;text-align:right;font-weight:700;color:var(--navy)">${salLabel}</td>
+          <td style="padding:11px 14px;color:var(--g4);font-size:12px">${obraName}</td>
+          <td style="padding:11px 14px;text-align:center">
+            <button class="btn bo" style="padding:4px 10px;font-size:11px" onclick="event.stopPropagation();persAbrirModal(${p.id})">✏️ Editar</button>
+            <button class="btn" style="padding:4px 10px;font-size:11px;background:${p.activo?'var(--red)':'var(--green)'};color:#fff;margin-left:4px" onclick="event.stopPropagation();persToggleActivo(${p.id})">${p.activo?'Dar de baja':'Reactivar'}</button>
+          </td>
+        </tr>`;
+      }).join('')}
+    </tbody>
+  </table>`;
+}
+
+function persAbrirModal(id){
+  var obras = DB.works || [];
+  var p = id ? (DB.personal||[]).find(x=>x.id===id) : null;
+  _persEditing = id || null;
+  var titulo = p ? 'Editar empleado' : 'Nuevo empleado';
+  document.getElementById('pers-modal-title').textContent = titulo;
+
+  var v = p || {nombre:'',puesto:'',tipo:'Nómina',salario:'',nss:'',curp:'',rfc:'',telefono:'',email:'',banco:'',cuenta:'',pid:'',activo:true,alta:today()};
+
+  document.getElementById('pers-modal-body').innerHTML=`
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+      <div style="grid-column:1/-1">
+        <label style="font-size:11px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">NOMBRE COMPLETO *</label>
+        <input id="pm-nombre" value="${v.nombre}" placeholder="Nombre completo" style="width:100%;border:1px solid var(--g2);border-radius:8px;padding:9px 11px;font-size:13px;outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">PUESTO</label>
+        <input id="pm-puesto" value="${v.puesto||''}" placeholder="Ej. Maestro de obra" style="width:100%;border:1px solid var(--g2);border-radius:8px;padding:9px 11px;font-size:13px;outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">TIPO DE CONTRATO *</label>
+        <select id="pm-tipo" style="width:100%;border:1px solid var(--g2);border-radius:8px;padding:9px 11px;font-size:13px;background:#fff">
+          <option value="Nómina" ${v.tipo==='Nómina'?'selected':''}>Nómina</option>
+          <option value="Destajo" ${v.tipo==='Destajo'?'selected':''}>Destajo</option>
+          <option value="Honorarios" ${v.tipo==='Honorarios'?'selected':''}>Honorarios</option>
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">SALARIO / PAGO</label>
+        <input id="pm-salario" type="number" value="${v.salario||''}" placeholder="0.00" style="width:100%;border:1px solid var(--g2);border-radius:8px;padding:9px 11px;font-size:13px;outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">TELÉFONO</label>
+        <input id="pm-tel" value="${v.telefono||''}" placeholder="449 000 0000" style="width:100%;border:1px solid var(--g2);border-radius:8px;padding:9px 11px;font-size:13px;outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">EMAIL</label>
+        <input id="pm-email" value="${v.email||''}" placeholder="correo@email.com" style="width:100%;border:1px solid var(--g2);border-radius:8px;padding:9px 11px;font-size:13px;outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">NSS</label>
+        <input id="pm-nss" value="${v.nss||''}" placeholder="IMSS / NSS" style="width:100%;border:1px solid var(--g2);border-radius:8px;padding:9px 11px;font-size:13px;outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">RFC</label>
+        <input id="pm-rfc" value="${v.rfc||''}" placeholder="RFC del empleado" style="width:100%;border:1px solid var(--g2);border-radius:8px;padding:9px 11px;font-size:13px;outline:none;box-sizing:border-box;text-transform:uppercase">
+      </div>
+      <div style="grid-column:1/-1">
+        <label style="font-size:11px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">CURP</label>
+        <input id="pm-curp" value="${v.curp||''}" placeholder="CURP" style="width:100%;border:1px solid var(--g2);border-radius:8px;padding:9px 11px;font-size:13px;outline:none;box-sizing:border-box;text-transform:uppercase">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">BANCO</label>
+        <input id="pm-banco" value="${v.banco||''}" placeholder="Ej. BBVA, Banorte…" style="width:100%;border:1px solid var(--g2);border-radius:8px;padding:9px 11px;font-size:13px;outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">CLABE / CUENTA</label>
+        <input id="pm-cuenta" value="${v.cuenta||''}" placeholder="18 dígitos" style="width:100%;border:1px solid var(--g2);border-radius:8px;padding:9px 11px;font-size:13px;outline:none;box-sizing:border-box">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">OBRA ASIGNADA</label>
+        <select id="pm-obra" style="width:100%;border:1px solid var(--g2);border-radius:8px;padding:9px 11px;font-size:13px;background:#fff">
+          <option value="">— Despacho (sin obra) —</option>
+          ${obras.map(o=>`<option value="${o.id}" ${String(v.pid)===String(o.id)?'selected':''}>${o.name}</option>`).join('')}
+        </select>
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">FECHA DE ALTA</label>
+        <input id="pm-alta" type="date" value="${v.alta||today()}" style="width:100%;border:1px solid var(--g2);border-radius:8px;padding:9px 11px;font-size:13px;outline:none;box-sizing:border-box">
+      </div>
+      <div style="grid-column:1/-1;display:flex;align-items:center;gap:8px;padding:8px 0">
+        <input type="checkbox" id="pm-activo" ${v.activo?'checked':''} style="width:16px;height:16px;cursor:pointer">
+        <label for="pm-activo" style="font-size:13px;font-weight:600;color:var(--navy);cursor:pointer">Empleado activo</label>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;margin-top:16px;justify-content:flex-end">
+      <button class="btn bo" onclick="persCerrarModal()">Cancelar</button>
+      <button class="btn bp" onclick="persGuardar()">💾 Guardar</button>
+    </div>
+  `;
+  document.getElementById('pers-modal').style.display='block';
+}
+
+function persCerrarModal(){
+  document.getElementById('pers-modal').style.display='none';
+  _persEditing = null;
+}
+
+function persGuardar(){
+  var nombre = document.getElementById('pm-nombre').value.trim();
+  if(!nombre){ toast('⚠️ Escribe el nombre'); return; }
+  var obj = {
+    nombre,
+    puesto:    document.getElementById('pm-puesto').value.trim(),
+    tipo:      document.getElementById('pm-tipo').value,
+    salario:   parseFloat(document.getElementById('pm-salario').value)||0,
+    telefono:  document.getElementById('pm-tel').value.trim(),
+    email:     document.getElementById('pm-email').value.trim(),
+    nss:       document.getElementById('pm-nss').value.trim(),
+    rfc:       document.getElementById('pm-rfc').value.trim().toUpperCase(),
+    curp:      document.getElementById('pm-curp').value.trim().toUpperCase(),
+    banco:     document.getElementById('pm-banco').value.trim(),
+    cuenta:    document.getElementById('pm-cuenta').value.trim(),
+    pid:       document.getElementById('pm-obra').value || null,
+    alta:      document.getElementById('pm-alta').value || today(),
+    activo:    document.getElementById('pm-activo').checked
+  };
+
+  if(_persEditing){
+    var idx = DB.personal.findIndex(x=>x.id===_persEditing);
+    if(idx>=0) Object.assign(DB.personal[idx], obj);
+    toast('✅ Empleado actualizado');
+  } else {
+    obj.id = (DB.personal.length ? Math.max(...DB.personal.map(x=>x.id))+1 : 1);
+    DB.personal.push(obj);
+    toast('✅ Empleado registrado');
+  }
+  persCerrarModal();
+  rPersonal();
+}
+
+function persToggleActivo(id){
+  var p = (DB.personal||[]).find(x=>x.id===id);
+  if(!p) return;
+  p.activo = !p.activo;
+  toast(p.activo ? '✅ Empleado reactivado' : '⚠️ Empleado dado de baja');
+  rPersonal();
+}
+</script>
+<!-- ═══════════════ FIN PERSONAL ═══════════════ -->
+
+<!-- ═══════════════ COTIZADOR LIBRE ═══════════════ -->
+<script>
+var _clPartidas = [];
+var _clIva = true;
+var _clDoc = {proyecto:'',cliente:'',fecha:today(),notas:''};
+
+function rCotizadorLibre(){
+  _clPartidas = [{id:1,concepto:'',unidad:'m²',cant:1,pu:0}];
+  _clIva = true;
+  _clDoc = {proyecto:'',cliente:'',fecha:today(),notas:''};
+
+  $('MN').innerHTML=`
+  <div class="ph3">
+    <div>
+      <div class="pt">📝 Cotizador Libre</div>
+      <div class="ps">Genera cotizaciones de forma libre por concepto</div>
+    </div>
+    <div style="display:flex;gap:8px">
+      <button class="btn bo" onclick="clLimpiar()">🗑 Limpiar</button>
+      <button class="btn bp" onclick="clPDF()">🖨 Imprimir / PDF</button>
+    </div>
+  </div>
+
+  <!-- DATOS DEL DOCUMENTO -->
+  <div class="card" style="padding:16px">
+    <div style="font-weight:700;color:var(--navy);font-size:13px;margin-bottom:12px">📋 Datos del documento</div>
+    <div class="g3c" style="gap:12px">
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">PROYECTO / DESCRIPCIÓN</label>
+        <input id="cl-proyecto" placeholder="Nombre del proyecto" style="width:100%;border:1px solid var(--g2);border-radius:8px;padding:8px 11px;font-size:13px;outline:none;box-sizing:border-box" oninput="_clDoc.proyecto=this.value">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">CLIENTE</label>
+        <input id="cl-cliente" placeholder="Nombre del cliente" style="width:100%;border:1px solid var(--g2);border-radius:8px;padding:8px 11px;font-size:13px;outline:none;box-sizing:border-box" oninput="_clDoc.cliente=this.value">
+      </div>
+      <div>
+        <label style="font-size:11px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">FECHA</label>
+        <input id="cl-fecha" type="date" value="${today()}" style="width:100%;border:1px solid var(--g2);border-radius:8px;padding:8px 11px;font-size:13px;outline:none;box-sizing:border-box" oninput="_clDoc.fecha=this.value">
+      </div>
+    </div>
+    <div style="margin-top:12px">
+      <label style="font-size:11px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">NOTAS / CONDICIONES</label>
+      <textarea id="cl-notas" rows="2" placeholder="Ej. Precios incluyen mano de obra. Tiempo de entrega: 8 semanas." style="width:100%;border:1px solid var(--g2);border-radius:8px;padding:8px 11px;font-size:13px;outline:none;resize:vertical;box-sizing:border-box;font-family:inherit" oninput="_clDoc.notas=this.value"></textarea>
+    </div>
+  </div>
+
+  <!-- TABLA DE PARTIDAS -->
+  <div class="card" style="padding:0;overflow:hidden">
+    <div style="padding:14px 16px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--g1)">
+      <div style="font-weight:700;color:var(--navy);font-size:13px">📐 Partidas</div>
+      <button class="btn bp" style="padding:6px 14px;font-size:12px" onclick="clAddPartida()">+ Agregar partida</button>
+    </div>
+    <div style="overflow-x:auto">
+      <table style="width:100%;border-collapse:collapse;font-size:13px" id="cl-tabla">
+        <thead>
+          <tr style="background:var(--g1)">
+            <th style="padding:9px 12px;text-align:left;font-size:11px;color:var(--g4);font-weight:700;min-width:200px">CONCEPTO</th>
+            <th style="padding:9px 12px;text-align:center;font-size:11px;color:var(--g4);font-weight:700;width:90px">UNIDAD</th>
+            <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--g4);font-weight:700;width:90px">CANT.</th>
+            <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--g4);font-weight:700;width:120px">P. UNIT.</th>
+            <th style="padding:9px 12px;text-align:right;font-size:11px;color:var(--g4);font-weight:700;width:120px">SUBTOTAL</th>
+            <th style="padding:9px 8px;width:40px"></th>
+          </tr>
+        </thead>
+        <tbody id="cl-tbody"></tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- TOTALES -->
+  <div class="card" style="padding:16px;max-width:400px;margin-left:auto">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span style="font-size:13px;color:var(--g4)">Subtotal</span>
+      <span style="font-weight:700;font-size:14px" id="cl-sub">$0.00</span>
+    </div>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
+        <input type="checkbox" id="cl-iva-chk" checked onchange="_clIva=this.checked;clRecalcular()" style="width:14px;height:14px">
+        <span style="font-size:13px;color:var(--g4)">IVA 16%</span>
+      </label>
+      <span style="font-weight:700;font-size:14px;color:var(--g4)" id="cl-iva-val">$0.00</span>
+    </div>
+    <div style="border-top:2px solid var(--navy);padding-top:10px;display:flex;justify-content:space-between;align-items:center">
+      <span style="font-size:15px;font-weight:800;color:var(--navy)">TOTAL</span>
+      <span style="font-size:20px;font-weight:900;color:var(--navy)" id="cl-total">$0.00</span>
+    </div>
+  </div>
+  `;
+
+  clRenderTabla();
+}
+
+function clRenderTabla(){
+  var tb = document.getElementById('cl-tbody');
+  if(!tb) return;
+  tb.innerHTML = _clPartidas.map((p,i)=>`
+    <tr style="border-top:1px solid var(--g1)" id="clr-${p.id}">
+      <td style="padding:8px 12px">
+        <input value="${p.concepto}" placeholder="Descripción de la partida" onchange="_clPartidas[${i}].concepto=this.value" style="width:100%;border:1px solid var(--g2);border-radius:6px;padding:6px 9px;font-size:12px;outline:none;box-sizing:border-box">
+      </td>
+      <td style="padding:8px 6px;text-align:center">
+        <input value="${p.unidad}" onchange="_clPartidas[${i}].unidad=this.value" style="width:80px;border:1px solid var(--g2);border-radius:6px;padding:6px 7px;font-size:12px;outline:none;text-align:center">
+      </td>
+      <td style="padding:8px 6px;text-align:right">
+        <input type="number" value="${p.cant}" min="0" step="any" onchange="_clPartidas[${i}].cant=parseFloat(this.value)||0;clRecalcular()" style="width:80px;border:1px solid var(--g2);border-radius:6px;padding:6px 7px;font-size:12px;outline:none;text-align:right">
+      </td>
+      <td style="padding:8px 6px;text-align:right">
+        <input type="number" value="${p.pu}" min="0" step="any" onchange="_clPartidas[${i}].pu=parseFloat(this.value)||0;clRecalcular()" style="width:110px;border:1px solid var(--g2);border-radius:6px;padding:6px 7px;font-size:12px;outline:none;text-align:right">
+      </td>
+      <td style="padding:8px 12px;text-align:right;font-weight:700;color:var(--navy);min-width:110px">${fmt(p.cant*p.pu)}</td>
+      <td style="padding:8px 8px;text-align:center">
+        <button onclick="clEliminarPartida(${p.id})" style="background:none;border:none;color:var(--red);cursor:pointer;font-size:16px;line-height:1" title="Eliminar">×</button>
+      </td>
+    </tr>
+  `).join('');
+  clRecalcular();
+}
+
+function clAddPartida(){
+  var newId = _clPartidas.length ? Math.max(..._clPartidas.map(p=>p.id))+1 : 1;
+  _clPartidas.push({id:newId, concepto:'', unidad:'m²', cant:1, pu:0});
+  clRenderTabla();
+  // focus en el nuevo concepto
+  setTimeout(()=>{
+    var row = document.getElementById('clr-'+newId);
+    if(row) row.querySelector('input').focus();
+  },50);
+}
+
+function clEliminarPartida(id){
+  if(_clPartidas.length === 1){ toast('⚠️ Debe haber al menos una partida'); return; }
+  _clPartidas = _clPartidas.filter(p=>p.id!==id);
+  clRenderTabla();
+}
+
+function clRecalcular(){
+  var sub = _clPartidas.reduce((a,p)=>a+(p.cant*p.pu),0);
+  var iva = _clIva ? sub*0.16 : 0;
+  var tot = sub + iva;
+  var s = document.getElementById('cl-sub');
+  var iv= document.getElementById('cl-iva-val');
+  var t = document.getElementById('cl-total');
+  if(s) s.textContent = fmt(sub);
+  if(iv) iv.textContent = fmt(iva);
+  if(t) t.textContent = fmt(tot);
+}
+
+function clLimpiar(){
+  _clPartidas = [{id:1,concepto:'',unidad:'m²',cant:1,pu:0}];
+  _clIva = true;
+  var inputs = ['cl-proyecto','cl-cliente','cl-notas'];
+  inputs.forEach(id=>{ var el=document.getElementById(id); if(el) el.value=''; });
+  var fc=document.getElementById('cl-fecha'); if(fc) fc.value=today();
+  var chk=document.getElementById('cl-iva-chk'); if(chk) chk.checked=true;
+  clRenderTabla();
+  toast('🗑 Cotización limpiada');
+}
+
+function clPDF(){
+  var proyecto = (document.getElementById('cl-proyecto')||{}).value || _clDoc.proyecto || 'Cotización';
+  var cliente  = (document.getElementById('cl-cliente')||{}).value  || _clDoc.cliente  || '—';
+  var fecha    = (document.getElementById('cl-fecha')||{}).value    || _clDoc.fecha    || today();
+  var notas    = (document.getElementById('cl-notas')||{}).value    || _clDoc.notas    || '';
+
+  var sub  = _clPartidas.reduce((a,p)=>a+(p.cant*p.pu),0);
+  var iva  = _clIva ? sub*0.16 : 0;
+  var tot  = sub + iva;
+
+  var filas = _clPartidas.filter(p=>p.concepto||p.cant||p.pu).map((p,i)=>`
+    <tr style="border-bottom:1px solid #eee">
+      <td style="padding:8px 10px;text-align:center;color:#666;font-size:12px">${i+1}</td>
+      <td style="padding:8px 10px;font-size:13px">${p.concepto||'—'}</td>
+      <td style="padding:8px 10px;text-align:center;font-size:12px;color:#555">${p.unidad}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:12px">${(p.cant||0).toLocaleString('es-MX',{maximumFractionDigits:2})}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:12px">${fmt(p.pu)}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:13px;font-weight:600;color:#1B3A5C">${fmt(p.cant*p.pu)}</td>
+    </tr>
+  `).join('');
+
+  var html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <title>Cotización — ${proyecto}</title>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1a1a1a;background:#fff;padding:24px}
+    @media print{body{padding:0} .no-print{display:none}}
+    .header{display:flex;justify-content:space-between;align-items:flex-start;padding:20px 24px;background:linear-gradient(135deg,#1B3A5C,#2a5a8c);border-radius:12px;margin-bottom:20px}
+    .header-left h1{color:#C9A84C;font-size:28px;font-weight:900;letter-spacing:1px}
+    .header-left p{color:rgba(255,255,255,.7);font-size:11px;margin-top:2px}
+    .header-right{text-align:right;color:#fff}
+    .header-right .doc-title{font-size:18px;font-weight:800;color:#C9A84C}
+    .header-right .doc-num{font-size:12px;color:rgba(255,255,255,.8);margin-top:2px}
+    .logoimg{height:38px;object-fit:contain;filter:brightness(10)}
+    .meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+    .meta-box{background:#f7f8fb;border-radius:8px;padding:12px 14px}
+    .meta-box label{font-size:10px;font-weight:700;color:#999;text-transform:uppercase;display:block;margin-bottom:3px}
+    .meta-box span{font-size:14px;font-weight:700;color:#1B3A5C}
+    table{width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;box-shadow:0 1px 8px rgba(0,0,0,.07)}
+    thead tr{background:#1B3A5C}
+    thead th{padding:10px 10px;text-align:right;color:#C9A84C;font-size:11px;font-weight:700;text-transform:uppercase}
+    thead th:nth-child(1){text-align:center}
+    thead th:nth-child(2){text-align:left}
+    thead th:nth-child(3){text-align:center}
+    tbody tr:nth-child(even){background:#f7f8fb}
+    .totales-wrap{display:flex;justify-content:flex-end;margin-top:16px}
+    .totales{width:280px;background:#fff;border:1px solid #eee;border-radius:10px;overflow:hidden}
+    .totales tr td{padding:9px 16px;font-size:13px}
+    .totales tr td:last-child{text-align:right;font-weight:700}
+    .total-row{background:#1B3A5C}
+    .total-row td{color:#fff;font-size:16px;font-weight:900;padding:12px 16px}
+    .total-row td:first-child{color:#C9A84C}
+    .notas{background:#fffbf0;border-left:4px solid #C9A84C;padding:12px 14px;border-radius:0 8px 8px 0;margin-top:16px;font-size:12px;color:#555}
+    .footer{margin-top:24px;text-align:center;font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:14px}
+    .print-btn{display:flex;gap:10px;justify-content:flex-end;margin-bottom:16px}
+    .print-btn button{padding:8px 20px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:700}
+    .btn-p{background:#1B3A5C;color:#fff}
+    .btn-c{background:#eee;color:#333}
+  </style></head><body>
+  <div class="print-btn no-print">
+    <button class="btn-c" onclick="window.close()">✕ Cerrar</button>
+    <button class="btn-p" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>
+  </div>
+  <div class="header">
+    <div class="header-left">
+      <img src="${LOGO_B64}" class="logoimg">
+      <p style="color:rgba(255,255,255,.6);font-size:10px;margin-top:6px">Diseño · Arquitectura · Construcción</p>
+    </div>
+    <div class="header-right">
+      <div class="doc-title">COTIZACIÓN</div>
+      <div class="doc-num">Fecha: ${fecha}</div>
+    </div>
+  </div>
+  <div class="meta-grid">
+    <div class="meta-box"><label>Proyecto</label><span>${proyecto}</span></div>
+    <div class="meta-box"><label>Cliente</label><span>${cliente}</span></div>
+  </div>
+  <table>
+    <thead><tr>
+      <th style="width:40px">#</th>
+      <th style="text-align:left">Concepto</th>
+      <th style="text-align:center;width:80px">Unidad</th>
+      <th style="width:80px">Cant.</th>
+      <th style="width:110px">P. Unitario</th>
+      <th style="width:120px">Subtotal</th>
+    </tr></thead>
+    <tbody>${filas}</tbody>
+  </table>
+  <div class="totales-wrap">
+    <table class="totales">
+      <tr><td style="color:#666">Subtotal</td><td>${fmt(sub)}</td></tr>
+      ${_clIva?`<tr><td style="color:#666">IVA 16%</td><td>${fmt(iva)}</td></tr>`:''}
+      <tr class="total-row"><td>TOTAL</td><td>${fmt(tot)}</td></tr>
+    </table>
+  </div>
+  ${notas?`<div class="notas"><b>Notas y condiciones:</b><br>${notas}</div>`:''}
+  <div class="footer">VAARQ · Arquitectura Villarreal · Aguascalientes, México · Este documento es una cotización y no constituye contrato.</div>
+  </body></html>`;
+
+  var w=window.open('','_blank','width=900,height=700');
+  if(w){ w.document.write(html); w.document.close(); }
+  else toast('⚠️ Permite ventanas emergentes para generar el PDF');
+}
+</script>
+<!-- ═══════════════ FIN COTIZADOR LIBRE ═══════════════ -->
 
 <!-- ═══════════════ ASISTENTE IA ═══════════════ -->
 <style>
