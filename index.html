@@ -603,6 +603,7 @@ function goTo(page){
   $('MN').innerHTML='';
   const map={dashboard:rDash,crm:rCRM,proyectos:rProj,cotizaciones:rCots,obras:rObras,bitacora:rBit,proyeccion:rProyeccion,finanzas:rFin,compras:rComp,proveedores:rProv,partidas:rPartidas,cotizador:rCotizador,caja:rCaja,documentos:rDocs,portal:rPortal,estadocuenta:rEstadoCuenta,planproyecto:rPlanProyecto,autorizaciones:rAutorizaciones};
   if(map[page]) map[page]();
+  window._currentPage = page;
   if(window.innerWidth<768){$('SB').classList.remove('open');$('OV').classList.remove('open')}
 }
 function toggleSB(){$('SB').classList.toggle('open');$('OV').classList.toggle('open')}
@@ -878,9 +879,14 @@ function guardarMontos(pid){
   const gast=parseInt(document.getElementById('ed_gast').value)||0;
   p.cont=cont; p.cot=cont; p.cob=cob; p.gast=gast;
   const w=DB.works.find(x=>x.pid===pid);
-  if(w) w.spent=gast;
+  if(w){ w.spent=gast; w.budget=cont; }
   cm();
   toast('✅ Montos actualizados');
+  // Re-render la página actual para reflejar cambios
+  var cur = document.querySelector('[data-page]');
+  if(window._currentPage==='proyectos') rProj();
+  else if(window._currentPage==='obras') rObras();
+  else if(window._currentPage==='dashboard') rDash();
 }
 
 // ══════════════════════════════════════
@@ -1005,19 +1011,112 @@ function pdfCot(i){
 }
 function openNewCot(){
   om('Nueva cotización',`
-    <div class="fg"><div class="fl">Cliente *</div><select class="fsl" id="nc_c">${DB.clients.map(c=>`<option value="${c.id}">${c.name}</option>`).join('')}</select></div>
+    <div class="fg">
+      <div class="fl">Cliente *</div>
+      <div style="position:relative">
+        <input class="fi" id="nc_c_txt" placeholder="Buscar o escribir nombre..." autocomplete="off"
+          oninput="ncFiltrarClientes(this.value)"
+          style="padding-right:36px">
+        <div id="nc_c_drop" style="display:none;position:absolute;top:100%;left:0;right:0;background:#fff;border:1.5px solid var(--navy);border-top:none;border-radius:0 0 8px 8px;z-index:999;max-height:160px;overflow-y:auto;box-shadow:0 4px 16px rgba(0,0,0,.12)"></div>
+      </div>
+      <div id="nc_nuevo_hint" style="display:none;font-size:11px;color:var(--amber);margin-top:4px;font-weight:600">
+        ✨ Se creará un nuevo cliente con este nombre
+      </div>
+      <input type="hidden" id="nc_c_id" value="">
+    </div>
     <div class="fr2">
       <div class="fg"><div class="fl">Total estimado *</div><input class="fi" id="nc_t" type="number" placeholder="0"></div>
       <div class="fg"><div class="fl">Margen objetivo %</div><input class="fi" id="nc_m" type="number" value="18"></div>
     </div>
-    <div class="fg"><div class="fl">Descripción</div><textarea class="fta" id="nc_d" placeholder="Alcance del proyecto..."></textarea></div>`,
+    <div class="fg"><div class="fl">Descripción / alcance</div><textarea class="fta" id="nc_d" placeholder="Alcance del proyecto..."></textarea></div>`,
     `<button class="btn bo" onclick="cm()">Cancelar</button><button class="btn bp" onclick="saveCot()">Crear cotización</button>`
   );
+  // Trigger initial list
+  setTimeout(()=>{ ncFiltrarClientes(''); document.getElementById('nc_c_txt').focus(); }, 150);
 }
+
+function ncFiltrarClientes(q){
+  var drop = document.getElementById('nc_c_drop');
+  var hint = document.getElementById('nc_nuevo_hint');
+  var hidId = document.getElementById('nc_c_id');
+  var txt = (q||'').trim().toLowerCase();
+
+  // Filter existing clients
+  var filtrados = txt ? DB.clients.filter(c=>c.name.toLowerCase().includes(txt)) : DB.clients;
+
+  if(filtrados.length > 0){
+    drop.style.display = 'block';
+    drop.innerHTML = filtrados.slice(0,8).map(c=>
+      `<div onclick="ncSelCliente(${c.id},'${c.name.replace(/'/g,"\'")}');this.closest('[id]').style.display='none'"
+        style="padding:9px 12px;font-size:13px;cursor:pointer;border-bottom:1px solid var(--g1)"
+        onmouseover="this.style.background='var(--g1)'" onmouseout="this.style.background='#fff'">
+        ${c.name}
+      </div>`
+    ).join('');
+    if(txt) {
+      // Show "create new" option at bottom if no exact match
+      var exacto = DB.clients.find(c=>c.name.toLowerCase()===txt);
+      if(!exacto){
+        drop.innerHTML += `<div onclick="ncSelNuevo(document.getElementById('nc_c_txt').value)"
+          style="padding:9px 12px;font-size:12px;cursor:pointer;color:var(--amber);font-weight:700;background:var(--abg)"
+          onmouseover="this.style.opacity='.8'" onmouseout="this.style.opacity='1'">
+          ✨ Crear "${document.getElementById('nc_c_txt').value}" como nuevo cliente
+        </div>`;
+        hint.style.display = 'none';
+        hidId.value = '';
+      }
+    }
+  } else if(txt) {
+    drop.style.display = 'block';
+    drop.innerHTML = `<div onclick="ncSelNuevo(document.getElementById('nc_c_txt').value)"
+      style="padding:9px 12px;font-size:12px;cursor:pointer;color:var(--amber);font-weight:700;background:var(--abg)">
+      ✨ Crear "${q}" como nuevo cliente
+    </div>`;
+    hint.style.display = 'block';
+    hidId.value = '';
+  } else {
+    drop.style.display = 'none';
+    hint.style.display = 'none';
+  }
+}
+
+function ncSelCliente(id, name){
+  document.getElementById('nc_c_txt').value = name;
+  document.getElementById('nc_c_id').value = id;
+  document.getElementById('nc_c_drop').style.display = 'none';
+  document.getElementById('nc_nuevo_hint').style.display = 'none';
+}
+
+function ncSelNuevo(name){
+  document.getElementById('nc_c_txt').value = name.trim();
+  document.getElementById('nc_c_id').value = '__nuevo__';
+  document.getElementById('nc_c_drop').style.display = 'none';
+  document.getElementById('nc_nuevo_hint').style.display = 'block';
+  document.getElementById('nc_nuevo_hint').textContent = '✨ Se creará "' + name.trim() + '" como nuevo cliente';
+}
+
 function saveCot(){
-  const t=parseInt($('nc_t').value)||0;if(!t){alert('Ingresa el monto');return}
-  DB.quotations.unshift({id:'COT-2025-0'+String(DB.quotations.length+1).padStart(2,'0'),pid:null,cid:parseInt($('nc_c').value),v:1,status:'BORRADOR',total:t,margin:parseFloat($('nc_m').value)||18,date:today()});
-  cm();rCots();toast('✅ Cotización creada');
+  var t = parseInt($('nc_t').value)||0;
+  if(!t){ alert('Ingresa el monto'); return; }
+  var nombre = ($('nc_c_txt').value||'').trim();
+  if(!nombre){ alert('Escribe el nombre del cliente'); return; }
+  var cid = $('nc_c_id').value;
+  var clienteId;
+  if(!cid || cid === '__nuevo__'){
+    // Create new client
+    clienteId = Date.now();
+    DB.clients.push({ id: clienteId, name: nombre, email:'', phone:'', type:'EMPRESA', status:'ACTIVO' });
+    if(cid==='__nuevo__') toast('👤 Nuevo cliente "'+nombre+'" creado');
+  } else {
+    clienteId = parseInt(cid);
+  }
+  var num = 'COT-2025-' + String(DB.quotations.length+1).padStart(3,'0');
+  DB.quotations.unshift({
+    id: num, pid: null, cid: clienteId, v:1, status:'BORRADOR',
+    total: t, margin: parseFloat($('nc_m').value)||18,
+    date: today(), desc: $('nc_d').value||''
+  });
+  cm(); rCots(); toast('✅ Cotización ' + num + ' creada');
 }
 
 // ══════════════════════════════════════
@@ -2056,14 +2155,30 @@ function renderCajaRows(movs){
     return`<tr>
       <td style="font-size:12px;color:var(--g4);white-space:nowrap">${m.fecha}</td>
       <td><span class="bdg ${m.tipo==='INGRESO'?'bgrn':'bam'}">${m.tipo==='INGRESO'?'⬆ Depósito':'⬇ Gasto'}</span></td>
-      <td><div style="font-size:13px;font-weight:600">${m.desc}</div></td>
+      <td>
+        <div style="font-size:13px;font-weight:600">${m.desc}</div>
+        ${m.proveedor?`<div style="font-size:11px;color:var(--g4)">🏪 ${m.proveedor}</div>`:''}
+      </td>
       <td><span class="bdg bgr">${m.cat}</span></td>
       <td style="font-size:12px;color:var(--g4)">${(p&&p.name)||'—'}</td>
       <td>${av(u)}</td>
       <td style="text-align:right"><span class="amt ${m.tipo==='INGRESO'?'g':'r'}">${m.tipo==='INGRESO'?'+':'−'}${fmt(m.monto)}</span></td>
-      <td>${m.comp?`<span class="bdg bgrn">✓ Con comprobante</span>`:`<span class="bdg bgr">Sin comprobante</span>`}</td>
+      <td>
+        ${m.comp?`<span class="bdg bgrn">✓ Comprobante</span>`:`<span class="bdg bgr">Sin comprobante</span>`}
+        ${m.foto?`<br><a onclick="cajaMostrarFoto('${m.id}')" style="font-size:10px;color:var(--navy);cursor:pointer;text-decoration:underline">📷 Ver foto</a>`:''}
+      </td>
     </tr>`;
   }).join('');
+}
+
+function cajaMostrarFoto(id){
+  var m = DB.caja.movimientos.find(x=>x.id==id);
+  if(!m||!m.foto) return;
+  om('📷 Comprobante — '+m.desc,
+    `<div style="text-align:center"><img src="${m.foto}" style="max-width:100%;max-height:400px;border-radius:10px"></div>
+     <div style="text-align:center;margin-top:10px;font-size:12px;color:var(--g4)">${m.fecha} · ${fmt(m.monto)} · ${m.cat}</div>`,
+    `<button class="btn bp" onclick="cm()">Cerrar</button>`
+  );
 }
 
 function filtrarCaja(tipo){
@@ -2104,6 +2219,28 @@ function openEgreso(){
     <div style="background:var(--abg);border-radius:8px;padding:12px 14px;margin-bottom:14px;font-size:13px;color:var(--amber)">
       <strong>Saldo disponible:</strong> ${fmt(DB.caja.saldo)}
     </div>
+
+    <!-- FOTO DE NOTA / TICKET -->
+    <div style="border:2px dashed var(--g2);border-radius:10px;padding:14px;text-align:center;margin-bottom:4px;cursor:pointer;transition:.15s"
+         onclick="document.getElementById('ce_foto_input').click()"
+         id="ce_foto_area"
+         ondragover="event.preventDefault();this.style.borderColor='var(--amber)'"
+         ondrop="event.preventDefault();cajaLeerNota(event.dataTransfer.files[0])">
+      <div id="ce_foto_preview" style="display:none;margin-bottom:8px">
+        <img id="ce_foto_img" style="max-height:120px;border-radius:8px;max-width:100%">
+      </div>
+      <div id="ce_foto_hint">
+        <div style="font-size:22px;margin-bottom:4px">📷</div>
+        <div style="font-size:12px;font-weight:700;color:var(--g4)">Foto del ticket / nota</div>
+        <div style="font-size:11px;color:var(--g3);margin-top:2px">Toca para tomar foto o subir imagen — la IA llenará el formulario</div>
+      </div>
+      <div id="ce_ai_loading" style="display:none;font-size:12px;color:var(--amber);font-weight:700">
+        <div style="font-size:20px;margin-bottom:4px">🤖</div>
+        Analizando ticket con IA...
+      </div>
+    </div>
+    <input type="file" id="ce_foto_input" accept="image/*" capture="environment" style="display:none" onchange="cajaLeerNota(this.files[0])">
+
     <div class="fg"><div class="fl">Descripción del gasto *</div><input class="fi" id="ce_d" placeholder="¿En qué se gastó?"></div>
     <div class="fr2">
       <div class="fg"><div class="fl">Categoría *</div>
@@ -2124,6 +2261,7 @@ function openEgreso(){
       </div>
       <div class="fg"><div class="fl">Fecha</div><input class="fi" id="ce_f" type="date" value="${today()}"></div>
     </div>
+    <div class="fg"><div class="fl">Proveedor / Tienda</div><input class="fi" id="ce_prov" placeholder="Ej: Home Depot, Soriana..."></div>
     <div class="fg"><div class="fl">¿Hay comprobante (ticket / factura)?</div>
       <select class="fsl" id="ce_comp"><option value="1">Sí, con comprobante</option><option value="0">No hay comprobante</option></select>
     </div>
@@ -2131,11 +2269,100 @@ function openEgreso(){
     `<button class="btn bo" onclick="cm()">Cancelar</button><button class="btn bp" onclick="saveEgreso()">Registrar gasto</button>`
   );
 }
+
+async function cajaLeerNota(file){
+  if(!file) return;
+  // Show preview
+  var reader = new FileReader();
+  reader.onload = function(e){
+    document.getElementById('ce_foto_img').src = e.target.result;
+    document.getElementById('ce_foto_preview').style.display = 'block';
+  };
+  reader.readAsDataURL(file);
+
+  // Show loading
+  document.getElementById('ce_foto_hint').style.display = 'none';
+  document.getElementById('ce_ai_loading').style.display = 'block';
+  document.getElementById('ce_foto_area').style.borderColor = 'var(--amber)';
+
+  // Convert to base64 for API
+  var b64 = await new Promise((res,rej)=>{
+    var r2 = new FileReader();
+    r2.onload = ()=> res(r2.result.split(',')[1]);
+    r2.onerror = rej;
+    r2.readAsDataURL(file);
+  });
+
+  var mtype = file.type || 'image/jpeg';
+
+  try {
+    var resp = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:500,
+        system:'Eres un asistente para leer tickets y notas de gastos. Responde SOLO con un JSON válido sin markdown, sin texto extra.',
+        messages:[{
+          role:'user',
+          content:[
+            {type:'image', source:{type:'base64', media_type: mtype, data: b64}},
+            {type:'text', text:'Lee este ticket/nota de gasto y extrae: monto total (número sin símbolo, si hay varios suma el total), descripción corta del gasto, nombre del proveedor o tienda, fecha (formato YYYY-MM-DD, si no hay pon hoy: '+today()+'), categoría (elige la más apropiada de: Materiales menores, Herramienta, Limpieza, Transporte / Gasolina, Comida / Viáticos, Papelería y oficina, Servicio / Reparación, Otro). Responde SOLO con JSON: {"monto":0,"descripcion":"","proveedor":"","fecha":"","categoria":""}'}
+          ]
+        }]
+      })
+    });
+    var data = await resp.json();
+    var txt = (data.content||[]).filter(x=>x.type==='text').map(x=>x.text).join('');
+    var clean = txt.replace(/```json|```/g,'').trim();
+    var parsed = JSON.parse(clean);
+
+    // Fill form
+    if(parsed.monto) document.getElementById('ce_m').value = parsed.monto;
+    if(parsed.descripcion) document.getElementById('ce_d').value = parsed.descripcion;
+    if(parsed.proveedor) document.getElementById('ce_prov').value = parsed.proveedor;
+    if(parsed.fecha) document.getElementById('ce_f').value = parsed.fecha;
+    if(parsed.categoria){
+      var sel = document.getElementById('ce_c');
+      for(var i=0;i<sel.options.length;i++){
+        if(sel.options[i].text.toLowerCase().includes(parsed.categoria.toLowerCase().split('/')[0].trim())){
+          sel.selectedIndex=i; break;
+        }
+      }
+    }
+    document.getElementById('ce_comp').value='1';
+    document.getElementById('ce_ai_loading').style.display = 'none';
+    document.getElementById('ce_foto_area').style.borderColor = 'var(--green)';
+    document.getElementById('ce_foto_hint').innerHTML = '<div style="font-size:11px;color:var(--green);font-weight:700">✅ Ticket leído — revisa y ajusta si es necesario</div>';
+    document.getElementById('ce_foto_hint').style.display = 'block';
+    toast('🤖 Ticket analizado — verifica los datos');
+  } catch(err) {
+    console.error(err);
+    document.getElementById('ce_ai_loading').style.display = 'none';
+    document.getElementById('ce_foto_hint').style.display = 'block';
+    document.getElementById('ce_foto_hint').innerHTML = '<div style="font-size:11px;color:var(--red)">⚠️ No se pudo leer. Llena manualmente.</div>';
+    toast('⚠️ Error al leer ticket — llena manualmente');
+  }
+}
 function saveEgreso(){
   const m=parseInt($('ce_m').value)||0;const d=$('ce_d').value.trim();
   if(!m){alert('Ingresa el monto');return}if(!d){alert('Describe el gasto');return}
-  if(m>DB.caja.saldo){if(!confirm(`El monto ($${m.toLocaleString()}) supera el saldo actual ($${DB.caja.saldo.toLocaleString()}). ¿Continuar?`))return}
-  DB.caja.movimientos.push({id:DB.caja.movimientos.length+1,tipo:'EGRESO',fecha:$('ce_f').value,desc:d+($('ce_n').value?' · '+$('ce_n').value:''),cat:$('ce_c').value,pid:$('ce_p').value||null,uid:DB.user.id,monto:m,comp:$('ce_comp').value==='1'});
+  if(m>DB.caja.saldo){if(!confirm('El monto ($'+m.toLocaleString()+') supera el saldo actual ($'+DB.caja.saldo.toLocaleString()+'). ¿Continuar?'))return}
+  var prov = document.getElementById('ce_prov') ? document.getElementById('ce_prov').value : '';
+  var descFull = d + (prov?' — '+prov:'') + ($('ce_n').value?' · '+$('ce_n').value:'');
+  // Guardar foto si existe
+  var fotoSrc = '';
+  var img = document.getElementById('ce_foto_img');
+  if(img && img.src && img.src.startsWith('data:')) fotoSrc = img.src;
+  DB.caja.movimientos.push({
+    id:DB.caja.movimientos.length+1, tipo:'EGRESO',
+    fecha:$('ce_f').value, desc:descFull,
+    cat:$('ce_c').value, pid:$('ce_p').value||null,
+    uid:DB.user.id, monto:m,
+    comp:$('ce_comp').value==='1',
+    proveedor: prov,
+    foto: fotoSrc
+  });
   DB.caja.saldo-=m;
   cm();rCaja();toast('✅ Gasto de caja chica registrado');
 }
@@ -4570,6 +4797,9 @@ document.addEventListener('DOMContentLoaded', function() {
       onfocus="this.style.borderColor='var(--navy)'" onblur="this.style.borderColor='var(--g2)'"
       onkeydown="if(event.key==='Enter')finEnviarAuth()">
 
+    <!-- CAMPOS EXTRA POR CATEGORÍA -->
+    <div id="fin-extras"></div>
+
     <!-- PROYECTO -->
     <select id="fin-proyecto"
       style="width:100%;padding:10px 12px;border:2px solid var(--g2);border-radius:10px;font-size:13px;background:#fff;outline:none">
@@ -4617,17 +4847,127 @@ function finRenderCats(){
   ).join('');
 }
 
+var _finCatSel = '';
+
+var FIN_EXTRAS = {
+  'Nómina': `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><div style="font-size:10px;font-weight:700;color:var(--g4);margin-bottom:4px">PERIODO</div>
+        <select id="fex_periodo" style="width:100%;padding:8px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px;background:#fff">
+          <option>Semana 1</option><option>Semana 2</option><option>Semana 3</option><option>Semana 4</option>
+          <option>Quincenal 1</option><option>Quincenal 2</option><option>Mensual</option>
+        </select>
+      </div>
+      <div><div style="font-size:10px;font-weight:700;color:var(--g4);margin-bottom:4px">Nº TRABAJADORES</div>
+        <input id="fex_trabaj" type="number" min="1" value="1" style="width:100%;padding:8px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px">
+      </div>
+    </div>
+    <div><div style="font-size:10px;font-weight:700;color:var(--g4);margin-bottom:4px">RESPONSABLE DE PAGO</div>
+      <select id="fex_resp" style="width:100%;padding:8px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px;background:#fff">
+        ${DB.users.map(u=>'<option value="'+u.id+'">'+u.name+'</option>').join('')}
+      </select>
+    </div>`,
+  'Mano de obra': `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><div style="font-size:10px;font-weight:700;color:var(--g4);margin-bottom:4px">OFICIO</div>
+        <select id="fex_oficio" style="width:100%;padding:8px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px;background:#fff">
+          <option>Albanil</option><option>Electricista</option><option>Plomero</option><option>Yesero</option>
+          <option>Pintor</option><option>Herrero</option><option>Carpintero</option><option>Otro</option>
+        </select>
+      </div>
+      <div><div style="font-size:10px;font-weight:700;color:var(--g4);margin-bottom:4px">DÍAS TRABAJADOS</div>
+        <input id="fex_dias" type="number" min="1" value="1" style="width:100%;padding:8px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px">
+      </div>
+    </div>`,
+  'Materiales': `
+    <div><div style="font-size:10px;font-weight:700;color:var(--g4);margin-bottom:4px">PROVEEDOR / TIENDA</div>
+      <input id="fex_prov" type="text" placeholder="Ej: Home Depot, Ferremat..." style="width:100%;padding:8px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px">
+    </div>
+    <div><div style="font-size:10px;font-weight:700;color:var(--g4);margin-bottom:4px">TIPO DE MATERIAL</div>
+      <select id="fex_matcat" style="width:100%;padding:8px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px;background:#fff">
+        <option>Ferrería general</option><option>Varilla y cemento</option><option>Tabique y block</option>
+        <option>Materiales eléctricos</option><option>Plomería</option><option>Acabados</option><option>Otro</option>
+      </select>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <input type="checkbox" id="fex_factura" style="width:16px;height:16px">
+      <label for="fex_factura" style="font-size:12px;color:var(--g4)">Viene con factura</label>
+    </div>`,
+  'Transporte': `
+    <div><div style="font-size:10px;font-weight:700;color:var(--g4);margin-bottom:4px">TIPO</div>
+      <select id="fex_ttype" style="width:100%;padding:8px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px;background:#fff">
+        <option>Gasolina vehículo de la empresa</option><option>Flete / camioneta</option>
+        <option>Uber / taxi</option><option>Casetas</option><option>Otro transporte</option>
+      </select>
+    </div>`,
+  'Destajos': `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><div style="font-size:10px;font-weight:700;color:var(--g4);margin-bottom:4px">PARTIDA</div>
+        <select id="fex_destpart" style="width:100%;padding:8px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px;background:#fff">
+          <option>Albañilería</option><option>Yeso</option><option>Piso y azulejo</option>
+          <option>Pintura</option><option>Electricidad</option><option>Plomería</option><option>Herrería</option><option>Otro</option>
+        </select>
+      </div>
+      <div><div style="font-size:10px;font-weight:700;color:var(--g4);margin-bottom:4px">TRABAJADOR / CUADRILLA</div>
+        <input id="fex_destnom" type="text" placeholder="Nombre" style="width:100%;padding:8px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px">
+      </div>
+    </div>`,
+  'Honorarios': `
+    <div><div style="font-size:10px;font-weight:700;color:var(--g4);margin-bottom:4px">DESCRIPCIÓN DEL SERVICIO</div>
+      <input id="fex_honserv" type="text" placeholder="Ej: Proyecto estructural, Renders..." style="width:100%;padding:8px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px">
+    </div>
+    <div style="display:flex;align-items:center;gap:8px">
+      <input type="checkbox" id="fex_honfact" style="width:16px;height:16px">
+      <label for="fex_honfact" style="font-size:12px;color:var(--g4)">Viene con factura</label>
+    </div>`,
+  'Servicio externo': `
+    <div><div style="font-size:10px;font-weight:700;color:var(--g4);margin-bottom:4px">EMPRESA / PERSONA</div>
+      <input id="fex_svemp" type="text" placeholder="Nombre de empresa o persona" style="width:100%;padding:8px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px">
+    </div>`,
+  'Anticipo': `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><div style="font-size:10px;font-weight:700;color:var(--g4);margin-bottom:4px">% DEL CONTRATO</div>
+        <input id="fex_pct" type="number" min="0" max="100" placeholder="30" style="width:100%;padding:8px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px">
+      </div>
+      <div><div style="font-size:10px;font-weight:700;color:var(--g4);margin-bottom:4px">FORMA DE PAGO</div>
+        <select id="fex_fpago" style="width:100%;padding:8px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px;background:#fff">
+          <option>Transferencia</option><option>Cheque</option><option>Efectivo</option>
+        </select>
+      </div>
+    </div>`,
+  'Estimación': `
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+      <div><div style="font-size:10px;font-weight:700;color:var(--g4);margin-bottom:4px">Nº ESTIMACIÓN</div>
+        <input id="fex_estnum" type="number" min="1" value="1" style="width:100%;padding:8px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px">
+      </div>
+      <div><div style="font-size:10px;font-weight:700;color:var(--g4);margin-bottom:4px">ETAPA</div>
+        <input id="fex_etapa" type="text" placeholder="Ej: Cimentación" style="width:100%;padding:8px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px">
+      </div>
+    </div>`
+};
+
 function finSelCat(cat){
+  _finCatSel = cat;
   var input = document.getElementById('fin-concepto');
   input.value = cat;
-  input.focus();
   // Highlight chips
   document.querySelectorAll('#fin-cats button').forEach(b=>{
     var color = finTipo==='ingreso' ? 'var(--green)' : 'var(--red)';
     var bg    = finTipo==='ingreso' ? 'var(--gbg)'   : 'var(--rbg)';
-    if(b.textContent===cat){ b.style.background=bg; b.style.fontWeight='800'; }
-    else { b.style.background='#fff'; b.style.fontWeight='600'; }
+    if(b.textContent===cat){ b.style.background=bg; b.style.fontWeight='800'; b.style.borderWidth='2px'; }
+    else { b.style.background='#fff'; b.style.fontWeight='600'; b.style.borderWidth='1.5px'; }
   });
+  // Mostrar campos extra si aplica
+  var extras = document.getElementById('fin-extras');
+  var tpl = FIN_EXTRAS[cat];
+  if(tpl){
+    extras.innerHTML = '<div style="background:var(--g1);border-radius:10px;padding:10px;display:flex;flex-direction:column;gap:8px">'
+      + '<div style="font-size:10px;font-weight:700;color:var(--g4);text-transform:uppercase;letter-spacing:.5px">📋 Detalle — '+cat+'</div>'
+      + tpl + '</div>';
+  } else {
+    extras.innerHTML = '';
+  }
+  input.focus();
 }
 
 function toggleFinPanel(){
