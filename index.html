@@ -3033,14 +3033,14 @@ function rPlanProyecto() {
   </div>
 
   <!-- SELECTOR DE PROYECTO -->
-  <div style="display:flex;gap:10px;flex-wrap:wrap">
+  <div style="display:flex;gap:10px;overflow-x:auto;padding-bottom:4px;-webkit-overflow-scrolling:touch">
     ${activos.map(p => {
       var cal = DB.calendarios[p.id];
       var prog = cal ? ppCalcProg(cal.actividades) : -1;
       var activo = ppState.pid === p.id;
       return `<div onclick="ppSelectProj('${p.id}')" style="
         cursor:pointer;padding:12px 16px;border-radius:10px;border:2px solid ${activo?'var(--navy)':'var(--g2)'};
-        background:${activo?'var(--navy)':'#fff'};min-width:140px;flex:1;max-width:200px;transition:.15s">
+        background:${activo?'var(--navy)':'#fff'};min-width:150px;flex:0 0 auto;max-width:200px;transition:.15s">
         <div style="font-size:11px;font-weight:700;color:${activo?'var(--gold)':'var(--g4)'};margin-bottom:3px">${p.id}</div>
         <div style="font-size:13px;font-weight:800;color:${activo?'#fff':'var(--navy)'};margin-bottom:6px">${p.name}</div>
         ${prog>=0 ?
@@ -3074,6 +3074,18 @@ function ppCalcProg(acts) {
   return Math.round(activas.reduce((s,a) => s + (a.prog||0), 0) / activas.length);
 }
 
+function ppSelFase(k) {
+  ppState.fase = k;
+  // Update visual of all fase cards
+  ['anteproyecto','ejecutivo','ambas'].forEach(fk => {
+    var el = document.getElementById('ppf-' + fk);
+    if (!el) return;
+    var sel = fk === k;
+    el.style.border = '2px solid ' + (sel ? 'var(--navy)' : 'var(--g2)');
+    el.style.background = sel ? '#EBF0F8' : '#fff';
+  });
+}
+
 function ppRenderContenido() {
   var pid = ppState.pid;
   var p = gP(pid);
@@ -3103,9 +3115,9 @@ function ppRenderWizard(p) {
          {k:'ejecutivo',lbl:'📋 Proyecto Ejecutivo',desc:'Planos, estructural, instalaciones, trámites'},
          {k:'ambas',lbl:'✨ Ambas fases',desc:'Proceso completo desde concepto hasta permisos'}
         ].map(f=>`
-        <div onclick="ppState.fase='${f.k}';document.querySelectorAll('.pp-fase-opt').forEach(x=>x.classList.remove('pp-sel'));this.classList.add('pp-sel')" 
-             class="pp-fase-opt${ppState.fase===f.k?' pp-sel':''}"
-             style="cursor:pointer;border:2px solid ${ppState.fase===f.k?'var(--navy)':'var(--g2)'};border-radius:10px;padding:12px 16px;min-width:150px;background:${ppState.fase===f.k?'#EBF0F8':'#fff'};transition:.15s">
+        <div onclick="ppSelFase('${f.k}')" 
+             id="ppf-${f.k}"
+             style="cursor:pointer;border:2px solid ${ppState.fase===f.k?'var(--navy)':'var(--g2)'};border-radius:10px;padding:12px 16px;min-width:140px;flex:1;max-width:220px;background:${ppState.fase===f.k?'#EBF0F8':'#fff'};transition:.15s">
           <div style="font-size:13px;font-weight:700;color:var(--navy)">${f.lbl}</div>
           <div style="font-size:11px;color:var(--g4);margin-top:3px">${f.desc}</div>
         </div>`).join('')}
