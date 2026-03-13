@@ -5114,18 +5114,38 @@ var _clDoc = {proyecto:'',cliente:'',fecha:today(),notas:''};
 function rCotizadorLibre(){
   _clPartidas = [{id:1,concepto:'',unidad:'m²',cant:1,pu:0}];
   _clIva = true;
+  _clHonorarios = 0;    // % de honorarios
+  _clIndirectos  = 0;    // % de indirectos
   _clDoc = {proyecto:'',cliente:'',fecha:today(),notas:''};
+  _clScanLoading = false;
 
   $('MN').innerHTML=`
   <div class="ph3">
     <div>
       <div class="pt">📝 Cotizador Libre</div>
-      <div class="ps">Genera cotizaciones de forma libre por concepto</div>
+      <div class="ps">Cotizaciones por concepto · Importa PDF/imagen con IA</div>
     </div>
     <div style="display:flex;gap:8px">
       <button class="btn bo" onclick="clLimpiar()">🗑 Limpiar</button>
       <button class="btn bp" onclick="clPDF()">🖨 Imprimir / PDF</button>
     </div>
+  </div>
+
+  <!-- IMPORTAR PDF/IMAGEN CON IA -->
+  <div class="card" style="padding:16px">
+    <div style="font-weight:700;color:var(--navy);font-size:13px;margin-bottom:10px">🤖 Importar desde PDF o imagen</div>
+    <div id="cl-drop-zone"
+      ondragover="event.preventDefault();this.style.borderColor='var(--navy)'"
+      ondragleave="this.style.borderColor='var(--g2)'"
+      ondrop="clHandleDrop(event)"
+      onclick="document.getElementById('cl-file-input').click()"
+      style="border:2px dashed var(--g2);border-radius:10px;padding:22px;text-align:center;cursor:pointer;transition:all .2s;background:var(--g1)">
+      <div style="font-size:28px;margin-bottom:6px">📄</div>
+      <div style="font-size:13px;font-weight:600;color:var(--navy)">Arrastra un PDF o imagen aquí</div>
+      <div style="font-size:11px;color:var(--g4);margin-top:4px">o toca para seleccionar · PDF, JPG, PNG</div>
+    </div>
+    <input type="file" id="cl-file-input" accept=".pdf,.jpg,.jpeg,.png,image/*" style="display:none" onchange="clHandleFile(this.files[0])">
+    <div id="cl-scan-status" style="margin-top:10px;display:none"></div>
   </div>
 
   <!-- DATOS DEL DOCUMENTO -->
@@ -5174,27 +5194,75 @@ function rCotizadorLibre(){
     </div>
   </div>
 
-  <!-- TOTALES -->
-  <div class="card" style="padding:16px;max-width:400px;margin-left:auto">
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <span style="font-size:13px;color:var(--g4)">Subtotal</span>
+  <!-- HONORARIOS, INDIRECTOS, IVA Y TOTALES -->
+  <div class="card" style="padding:16px;max-width:460px;margin-left:auto">
+    <div style="font-size:11px;font-weight:700;color:var(--g4);margin-bottom:10px">CARGOS ADICIONALES</div>
+
+    <!-- Subtotal partidas -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--g1)">
+      <span style="font-size:13px;color:var(--g4)">Subtotal partidas</span>
       <span style="font-weight:700;font-size:14px" id="cl-sub">$0.00</span>
     </div>
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">
+
+    <!-- Honorarios -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--g1);gap:10px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;color:var(--g4)">
+          <input type="checkbox" id="cl-hon-chk" onchange="clToggleHon(this.checked)" style="width:14px;height:14px">
+          Honorarios
+        </label>
+        <input type="number" id="cl-hon-pct" value="10" min="0" max="100" step="0.5"
+          style="width:60px;border:1px solid var(--g2);border-radius:6px;padding:4px 7px;font-size:12px;outline:none;display:none"
+          oninput="_clHonorarios=parseFloat(this.value)||0;clRecalcular()">
+        <span id="cl-hon-pct-lbl" style="font-size:12px;color:var(--g4);display:none">%</span>
+      </div>
+      <span id="cl-hon-val" style="font-weight:700;font-size:13px;color:var(--navy)">—</span>
+    </div>
+
+    <!-- Indirectos -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--g1);gap:10px">
+      <div style="display:flex;align-items:center;gap:6px">
+        <label style="display:flex;align-items:center;gap:5px;cursor:pointer;font-size:13px;color:var(--g4)">
+          <input type="checkbox" id="cl-ind-chk" onchange="clToggleInd(this.checked)" style="width:14px;height:14px">
+          Indirectos
+        </label>
+        <input type="number" id="cl-ind-pct" value="12" min="0" max="100" step="0.5"
+          style="width:60px;border:1px solid var(--g2);border-radius:6px;padding:4px 7px;font-size:12px;outline:none;display:none"
+          oninput="_clIndirectos=parseFloat(this.value)||0;clRecalcular()">
+        <span id="cl-ind-pct-lbl" style="font-size:12px;color:var(--g4);display:none">%</span>
+      </div>
+      <span id="cl-ind-val" style="font-weight:700;font-size:13px;color:var(--navy)">—</span>
+    </div>
+
+    <!-- IVA -->
+    <div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--g1)">
       <label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-        <input type="checkbox" id="cl-iva-chk" checked onchange="_clIva=this.checked;clRecalcular()" style="width:14px;height:14px">
+        <input type="checkbox" id="cl-iva-chk" onchange="_clIva=this.checked;clRecalcular()" style="width:14px;height:14px">
         <span style="font-size:13px;color:var(--g4)">IVA 16%</span>
       </label>
-      <span style="font-weight:700;font-size:14px;color:var(--g4)" id="cl-iva-val">$0.00</span>
+      <span style="font-weight:700;font-size:13px;color:var(--g4)" id="cl-iva-val">—</span>
     </div>
-    <div style="border-top:2px solid var(--navy);padding-top:10px;display:flex;justify-content:space-between;align-items:center">
+
+    <!-- TOTAL -->
+    <div style="border-top:2px solid var(--navy);padding-top:10px;margin-top:8px;display:flex;justify-content:space-between;align-items:center">
       <span style="font-size:15px;font-weight:800;color:var(--navy)">TOTAL</span>
-      <span style="font-size:20px;font-weight:900;color:var(--navy)" id="cl-total">$0.00</span>
+      <span style="font-size:22px;font-weight:900;color:var(--navy)" id="cl-total">$0.00</span>
     </div>
   </div>
   `;
 
   clRenderTabla();
+}
+
+function clToggleHon(on){
+  _clHonorarios = on ? (parseFloat(document.getElementById('cl-hon-pct').value)||10) : 0;
+  ['cl-hon-pct','cl-hon-pct-lbl'].forEach(id=>{ var e=document.getElementById(id); if(e) e.style.display=on?'inline-block':'none'; });
+  clRecalcular();
+}
+function clToggleInd(on){
+  _clIndirectos = on ? (parseFloat(document.getElementById('cl-ind-pct').value)||12) : 0;
+  ['cl-ind-pct','cl-ind-pct-lbl'].forEach(id=>{ var e=document.getElementById(id); if(e) e.style.display=on?'inline-block':'none'; });
+  clRecalcular();
 }
 
 function clRenderTabla(){
@@ -5225,42 +5293,147 @@ function clRenderTabla(){
 
 function clAddPartida(){
   var newId = _clPartidas.length ? Math.max(..._clPartidas.map(p=>p.id))+1 : 1;
-  _clPartidas.push({id:newId, concepto:'', unidad:'m²', cant:1, pu:0});
+  _clPartidas.push({id:newId, concepto:'', unidad:'pza', cant:1, pu:0});
   clRenderTabla();
-  // focus en el nuevo concepto
-  setTimeout(()=>{
-    var row = document.getElementById('clr-'+newId);
-    if(row) row.querySelector('input').focus();
-  },50);
+  setTimeout(()=>{ var row=document.getElementById('clr-'+newId); if(row) row.querySelector('input').focus(); },50);
 }
 
 function clEliminarPartida(id){
-  if(_clPartidas.length === 1){ toast('⚠️ Debe haber al menos una partida'); return; }
+  if(_clPartidas.length===1){ toast('⚠️ Debe haber al menos una partida'); return; }
   _clPartidas = _clPartidas.filter(p=>p.id!==id);
   clRenderTabla();
 }
 
 function clRecalcular(){
   var sub = _clPartidas.reduce((a,p)=>a+(p.cant*p.pu),0);
-  var iva = _clIva ? sub*0.16 : 0;
-  var tot = sub + iva;
-  var s = document.getElementById('cl-sub');
-  var iv= document.getElementById('cl-iva-val');
-  var t = document.getElementById('cl-total');
-  if(s) s.textContent = fmt(sub);
-  if(iv) iv.textContent = fmt(iva);
-  if(t) t.textContent = fmt(tot);
+  var honChk = document.getElementById('cl-hon-chk');
+  var indChk = document.getElementById('cl-ind-chk');
+  var honOn = honChk && honChk.checked;
+  var indOn = indChk && indChk.checked;
+  _clHonorarios = honOn ? (parseFloat((document.getElementById('cl-hon-pct')||{}).value)||10) : 0;
+  _clIndirectos  = indOn ? (parseFloat((document.getElementById('cl-ind-pct')||{}).value)||12) : 0;
+  var honMonto = sub * (_clHonorarios/100);
+  var indMonto = sub * (_clIndirectos/100);
+  var baseIva  = sub + honMonto + indMonto;
+  var ivaChk   = document.getElementById('cl-iva-chk');
+  _clIva = ivaChk && ivaChk.checked;
+  var iva  = _clIva ? baseIva*0.16 : 0;
+  var tot  = baseIva + iva;
+  var set  = (id,val,show)=>{ var e=document.getElementById(id); if(e){ e.textContent=val; if(show!==undefined) e.closest('div').style.display=show?'':'none'; } };
+  var sf = id=>{ var e=document.getElementById(id); if(e) e.textContent=fmt(e.__val||0); };
+  if(document.getElementById('cl-sub')) document.getElementById('cl-sub').textContent=fmt(sub);
+  if(document.getElementById('cl-hon-val')) document.getElementById('cl-hon-val').textContent=honOn?fmt(honMonto):'—';
+  if(document.getElementById('cl-ind-val')) document.getElementById('cl-ind-val').textContent=indOn?fmt(indMonto):'—';
+  if(document.getElementById('cl-iva-val')) document.getElementById('cl-iva-val').textContent=_clIva?fmt(iva):'—';
+  if(document.getElementById('cl-total'))  document.getElementById('cl-total').textContent=fmt(tot);
+  // update subtotals in table
+  var tds=document.querySelectorAll('#cl-tbody tr td:nth-child(5)');
+  _clPartidas.forEach((p,i)=>{ if(tds[i]) tds[i].textContent=fmt(p.cant*p.pu); });
 }
 
 function clLimpiar(){
-  _clPartidas = [{id:1,concepto:'',unidad:'m²',cant:1,pu:0}];
-  _clIva = true;
-  var inputs = ['cl-proyecto','cl-cliente','cl-notas'];
-  inputs.forEach(id=>{ var el=document.getElementById(id); if(el) el.value=''; });
+  _clPartidas=[{id:1,concepto:'',unidad:'m²',cant:1,pu:0}];
+  _clIva=true; _clHonorarios=0; _clIndirectos=0;
+  ['cl-proyecto','cl-cliente','cl-notas'].forEach(id=>{ var e=document.getElementById(id); if(e) e.value=''; });
   var fc=document.getElementById('cl-fecha'); if(fc) fc.value=today();
   var chk=document.getElementById('cl-iva-chk'); if(chk) chk.checked=true;
+  var hc=document.getElementById('cl-hon-chk'); if(hc) hc.checked=false;
+  var ic=document.getElementById('cl-ind-chk'); if(ic) ic.checked=false;
   clRenderTabla();
   toast('🗑 Cotización limpiada');
+}
+
+// ── IMPORTAR PDF / IMAGEN CON IA ──────────────────────
+function clHandleDrop(e){
+  e.preventDefault();
+  document.getElementById('cl-drop-zone').style.borderColor='var(--g2)';
+  var file = e.dataTransfer.files[0];
+  if(file) clHandleFile(file);
+}
+
+function clHandleFile(file){
+  if(!file) return;
+  var allowed = ['application/pdf','image/jpeg','image/png','image/jpg','image/webp'];
+  if(!allowed.some(t=>file.type.startsWith(t.split('/')[0]) || file.type===t)){
+    toast('⚠️ Solo PDF, JPG o PNG'); return;
+  }
+  var status = document.getElementById('cl-scan-status');
+  status.style.display='block';
+  status.innerHTML=`<div style="display:flex;align-items:center;gap:10px;padding:12px;background:var(--g1);border-radius:8px">
+    <div style="width:20px;height:20px;border:2px solid var(--navy);border-top-color:transparent;border-radius:50%;animation:spin .8s linear infinite"></div>
+    <span style="font-size:13px;color:var(--navy);font-weight:600">🤖 Analizando ${file.name}…</span>
+  </div>`;
+  var reader = new FileReader();
+  reader.onload = function(ev){
+    var b64 = ev.target.result.split(',')[1];
+    var mtype = file.type.includes('pdf') ? 'application/pdf' : file.type || 'image/jpeg';
+    clScanWithAI(b64, mtype, file.name);
+  };
+  reader.readAsDataURL(file);
+}
+
+async function clScanWithAI(b64, mtype, fname){
+  var status = document.getElementById('cl-scan-status');
+  var isPdf = mtype.includes('pdf');
+  var contentBlock = isPdf
+    ? {type:'document', source:{type:'base64', media_type:'application/pdf', data:b64}}
+    : {type:'image',    source:{type:'base64', media_type:mtype,              data:b64}};
+  try{
+    var resp = await fetch('https://api.anthropic.com/v1/messages',{
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        model:'claude-sonnet-4-20250514',
+        max_tokens:2000,
+        messages:[{
+          role:'user',
+          content:[
+            contentBlock,
+            {type:'text', text:`Analiza este documento y extrae TODOS los conceptos de obra, partidas, materiales o servicios cotizados.
+Responde ÚNICAMENTE con un JSON así, sin texto extra ni markdown:
+{
+  "proyecto": "nombre del proyecto si aparece, sino vacío",
+  "cliente": "nombre del cliente si aparece, sino vacío",
+  "partidas": [
+    {"concepto": "descripción", "unidad": "m²/pza/ml/etc", "cant": número, "pu": precio unitario número}
+  ]
+}
+Si no ves precios, pon pu:0. Si no ves cantidades, pon cant:1.`
+            }
+          ]
+        }]
+      })
+    });
+    var data = await resp.json();
+    var txt = (data.content||[]).filter(b=>b.type==='text').map(b=>b.text).join('');
+    txt = txt.replace(/```json|```/g,'').trim();
+    var parsed = JSON.parse(txt);
+    // Rellenar datos
+    if(parsed.proyecto){ var ep=document.getElementById('cl-proyecto'); if(ep&&!ep.value) ep.value=parsed.proyecto; _clDoc.proyecto=parsed.proyecto; }
+    if(parsed.cliente){  var ec=document.getElementById('cl-cliente');  if(ec&&!ec.value) ec.value=parsed.cliente;  _clDoc.cliente=parsed.cliente; }
+    if(parsed.partidas && parsed.partidas.length>0){
+      var base = _clPartidas[0].concepto===''&&_clPartidas[0].pu===0 ? [] : _clPartidas;
+      var nextId = base.length ? Math.max(...base.map(p=>p.id))+1 : 1;
+      var nuevas = parsed.partidas.map((p,i)=>({
+        id: nextId+i,
+        concepto: p.concepto||'',
+        unidad: p.unidad||'pza',
+        cant: parseFloat(p.cant)||1,
+        pu: parseFloat(p.pu)||0
+      }));
+      _clPartidas = [...base, ...nuevas];
+      clRenderTabla();
+      status.innerHTML=`<div style="display:flex;align-items:center;gap:8px;padding:10px 14px;background:#e8f5e9;border-radius:8px;border-left:3px solid var(--green)">
+        <span style="font-size:16px">✅</span>
+        <span style="font-size:13px;color:#2e7d32;font-weight:600">${parsed.partidas.length} partidas importadas desde ${fname}</span>
+      </div>`;
+    } else {
+      status.innerHTML=`<div style="padding:10px 14px;background:#fff8e1;border-radius:8px;border-left:3px solid var(--amber);font-size:13px;color:#f57f17;font-weight:600">⚠️ No se encontraron partidas en el documento. Revisa que sea una cotización o presupuesto.</div>`;
+    }
+  } catch(err){
+    console.error(err);
+    status.innerHTML=`<div style="padding:10px 14px;background:#ffebee;border-radius:8px;border-left:3px solid var(--red);font-size:13px;color:var(--red);font-weight:600">❌ Error al analizar: ${err.message}</div>`;
+  }
 }
 
 function clPDF(){
@@ -5270,195 +5443,76 @@ function clPDF(){
   var notas    = (document.getElementById('cl-notas')||{}).value    || _clDoc.notas    || '';
 
   var sub  = _clPartidas.reduce((a,p)=>a+(p.cant*p.pu),0);
-  var iva  = _clIva ? sub*0.16 : 0;
-  var tot  = sub + iva;
+  var honChk=document.getElementById('cl-hon-chk'); var indChk=document.getElementById('cl-ind-chk'); var ivaChk=document.getElementById('cl-iva-chk');
+  var honOn=honChk&&honChk.checked; var indOn=indChk&&indChk.checked;
+  var honPct=honOn?(parseFloat((document.getElementById('cl-hon-pct')||{}).value)||10):0;
+  var indPct=indOn?(parseFloat((document.getElementById('cl-ind-pct')||{}).value)||12):0;
+  var honMonto=sub*(honPct/100); var indMonto=sub*(indPct/100);
+  var baseIva=sub+honMonto+indMonto;
+  var ivaOn=ivaChk&&ivaChk.checked; var iva=ivaOn?baseIva*.16:0;
+  var tot=baseIva+iva;
 
   var filas = _clPartidas.filter(p=>p.concepto||p.cant||p.pu).map((p,i)=>`
     <tr style="border-bottom:1px solid #eee">
       <td style="padding:8px 10px;text-align:center;color:#666;font-size:12px">${i+1}</td>
       <td style="padding:8px 10px;font-size:13px">${p.concepto||'—'}</td>
       <td style="padding:8px 10px;text-align:center;font-size:12px;color:#555">${p.unidad}</td>
-      <td style="padding:8px 10px;text-align:right;font-size:12px">${(p.cant||0).toLocaleString('es-MX',{maximumFractionDigits:2})}</td>
-      <td style="padding:8px 10px;text-align:right;font-size:12px">${fmt(p.pu)}</td>
-      <td style="padding:8px 10px;text-align:right;font-size:13px;font-weight:600;color:#1B3A5C">${fmt(p.cant*p.pu)}</td>
-    </tr>
-  `).join('');
+      <td style="padding:8px 10px;text-align:right;font-size:12px">${p.cant}</td>
+      <td style="padding:8px 10px;text-align:right;font-size:13px">$${p.pu.toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+      <td style="padding:8px 10px;text-align:right;font-weight:700;font-size:13px">$${(p.cant*p.pu).toLocaleString('es-MX',{minimumFractionDigits:2,maximumFractionDigits:2})}</td>
+    </tr>`).join('');
 
-  var html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
-  <title>Cotización — ${proyecto}</title>
-  <style>
-    *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;color:#1a1a1a;background:#fff;padding:24px}
-    @media print{body{padding:0} .no-print{display:none}}
-    .header{display:flex;justify-content:space-between;align-items:flex-start;padding:20px 24px;background:linear-gradient(135deg,#1B3A5C,#2a5a8c);border-radius:12px;margin-bottom:20px}
-    .header-left h1{color:#C9A84C;font-size:28px;font-weight:900;letter-spacing:1px}
-    .header-left p{color:rgba(255,255,255,.7);font-size:11px;margin-top:2px}
-    .header-right{text-align:right;color:#fff}
-    .header-right .doc-title{font-size:18px;font-weight:800;color:#C9A84C}
-    .header-right .doc-num{font-size:12px;color:rgba(255,255,255,.8);margin-top:2px}
-    .logoimg{height:38px;object-fit:contain;filter:brightness(10)}
-    .meta-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
-    .meta-box{background:#f7f8fb;border-radius:8px;padding:12px 14px}
-    .meta-box label{font-size:10px;font-weight:700;color:#999;text-transform:uppercase;display:block;margin-bottom:3px}
-    .meta-box span{font-size:14px;font-weight:700;color:#1B3A5C}
-    table{width:100%;border-collapse:collapse;border-radius:8px;overflow:hidden;box-shadow:0 1px 8px rgba(0,0,0,.07)}
-    thead tr{background:#1B3A5C}
-    thead th{padding:10px 10px;text-align:right;color:#C9A84C;font-size:11px;font-weight:700;text-transform:uppercase}
-    thead th:nth-child(1){text-align:center}
-    thead th:nth-child(2){text-align:left}
-    thead th:nth-child(3){text-align:center}
-    tbody tr:nth-child(even){background:#f7f8fb}
-    .totales-wrap{display:flex;justify-content:flex-end;margin-top:16px}
-    .totales{width:280px;background:#fff;border:1px solid #eee;border-radius:10px;overflow:hidden}
-    .totales tr td{padding:9px 16px;font-size:13px}
-    .totales tr td:last-child{text-align:right;font-weight:700}
-    .total-row{background:#1B3A5C}
-    .total-row td{color:#fff;font-size:16px;font-weight:900;padding:12px 16px}
-    .total-row td:first-child{color:#C9A84C}
-    .notas{background:#fffbf0;border-left:4px solid #C9A84C;padding:12px 14px;border-radius:0 8px 8px 0;margin-top:16px;font-size:12px;color:#555}
-    .footer{margin-top:24px;text-align:center;font-size:10px;color:#aaa;border-top:1px solid #eee;padding-top:14px}
-    .print-btn{display:flex;gap:10px;justify-content:flex-end;margin-bottom:16px}
-    .print-btn button{padding:8px 20px;border-radius:8px;border:none;cursor:pointer;font-size:13px;font-weight:700}
-    .btn-p{background:#1B3A5C;color:#fff}
-    .btn-c{background:#eee;color:#333}
-  </style></head><body>
-  <div class="print-btn no-print">
-    <button class="btn-c" onclick="window.close()">✕ Cerrar</button>
-    <button class="btn-p" onclick="window.print()">🖨 Imprimir / Guardar PDF</button>
-  </div>
-  <div class="header">
-    <div class="header-left">
-      <img src="${LOGO_B64}" class="logoimg">
-      <p style="color:rgba(255,255,255,.6);font-size:10px;margin-top:6px">Diseño · Arquitectura · Construcción</p>
-    </div>
-    <div class="header-right">
-      <div class="doc-title">COTIZACIÓN</div>
-      <div class="doc-num">Fecha: ${fecha}</div>
+  var extraRows = '';
+  if(honOn) extraRows+=`<tr><td colspan="5" style="padding:7px 10px;text-align:right;font-size:12px;color:#666">Honorarios (${honPct}%)</td><td style="padding:7px 10px;text-align:right;font-weight:700">$${honMonto.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>`;
+  if(indOn) extraRows+=`<tr><td colspan="5" style="padding:7px 10px;text-align:right;font-size:12px;color:#666">Indirectos (${indPct}%)</td><td style="padding:7px 10px;text-align:right;font-weight:700">$${indMonto.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>`;
+  if(honOn||indOn) extraRows+=`<tr style="background:#f5f7fa"><td colspan="5" style="padding:7px 10px;text-align:right;font-size:12px;color:#666">Subtotal</td><td style="padding:7px 10px;text-align:right;font-weight:700">$${baseIva.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>`;
+  if(ivaOn) extraRows+=`<tr><td colspan="5" style="padding:7px 10px;text-align:right;font-size:12px;color:#666">IVA 16%</td><td style="padding:7px 10px;text-align:right;font-weight:700">$${iva.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>`;
+
+  var w=window.open('','_blank');
+  w.document.write(`<!DOCTYPE html><html><head><title>${proyecto}</title>
+  <style>*{margin:0;padding:0;box-sizing:border-box}body{font-family:Arial,sans-serif;font-size:13px;color:#333;padding:36px;max-width:780px;margin:0 auto}
+  .hd{display:flex;justify-content:space-between;padding-bottom:16px;border-bottom:3px solid #1B3A5C;margin-bottom:20px}
+  .logoimg{height:52px;border-radius:4px}
+  h2{font-size:13px;color:#1B3A5C;margin:18px 0 8px;border-bottom:1px solid #eee;padding-bottom:5px;text-transform:uppercase;letter-spacing:.5px}
+  table{width:100%;border-collapse:collapse;margin-bottom:14px}
+  th{background:#1B3A5C;color:#fff;padding:8px 10px;font-size:11px;text-align:left}
+  td{padding:7px 10px;border-bottom:1px solid #eee;font-size:12px}
+  .tot td{font-weight:800;font-size:15px;border-top:2px solid #1B3A5C;background:#f0f4f8;border-bottom:none}
+  .ib{background:#f5f7fa;border-radius:6px;padding:12px 14px;margin-bottom:14px;font-size:12px;line-height:1.9}
+  .ft{margin-top:36px;padding-top:16px;border-top:1px solid #eee;font-size:11px;color:#999;text-align:center}
+  @media print{body{padding:20px}}</style></head><body>
+  <div class="hd">
+    <div><img src="${LOGO_B64}" class="logoimg" onerror="this.style.display='none'"><div style="font-size:11px;color:#666;margin-top:3px">Villarreal Arquitectura · Constructora Villarreal</div></div>
+    <div style="text-align:right">
+      <div style="font-size:11px;color:#999;text-transform:uppercase;letter-spacing:.8px;margin-bottom:3px">Cotización</div>
+      <div style="font-size:20px;font-weight:800;color:#1B3A5C">${proyecto}</div>
+      <div style="font-size:11px;color:#666">${fecha}</div>
     </div>
   </div>
-  <div class="meta-grid">
-    <div class="meta-box"><label>Proyecto</label><span>${proyecto}</span></div>
-    <div class="meta-box"><label>Cliente</label><span>${cliente}</span></div>
+  <div class="ib">
+    <strong style="font-size:14px;color:#1B3A5C">Propuesta para: ${cliente}</strong><br>
+    Fecha de emisión: ${fecha}${notas?'<br><em>'+notas+'</em>':''}
   </div>
+  <h2>Desglose de partidas</h2>
   <table>
-    <thead><tr>
-      <th style="width:40px">#</th>
-      <th style="text-align:left">Concepto</th>
-      <th style="text-align:center;width:80px">Unidad</th>
-      <th style="width:80px">Cant.</th>
-      <th style="width:110px">P. Unitario</th>
-      <th style="width:120px">Subtotal</th>
-    </tr></thead>
-    <tbody>${filas}</tbody>
+    <thead><tr><th style="width:36px">#</th><th>Concepto</th><th style="text-align:center;width:80px">Unidad</th><th style="text-align:right;width:70px">Cant.</th><th style="text-align:right;width:110px">P. Unit.</th><th style="text-align:right;width:120px">Subtotal</th></tr></thead>
+    <tbody>
+    ${filas}
+    <tr style="background:#f5f7fa"><td colspan="5" style="padding:8px 10px;text-align:right;font-size:12px;font-weight:700">Subtotal partidas</td><td style="padding:8px 10px;text-align:right;font-weight:800">$${sub.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>
+    ${extraRows}
+    <tr class="tot"><td colspan="5" style="text-align:right">TOTAL</td><td style="text-align:right;color:#1B3A5C;font-size:17px">$${tot.toLocaleString('es-MX',{minimumFractionDigits:2})}</td></tr>
+    </tbody>
   </table>
-  <div class="totales-wrap">
-    <table class="totales">
-      <tr><td style="color:#666">Subtotal</td><td>${fmt(sub)}</td></tr>
-      ${_clIva?`<tr><td style="color:#666">IVA 16%</td><td>${fmt(iva)}</td></tr>`:''}
-      <tr class="total-row"><td>TOTAL</td><td>${fmt(tot)}</td></tr>
-    </table>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;margin-top:50px">
+    <div style="text-align:center"><div style="border-top:1px solid #333;padding-top:7px;font-size:11px">Miguel Villarreal · Director General<br>Villarreal Arquitectura</div></div>
+    <div style="text-align:center"><div style="border-top:1px solid #333;padding-top:7px;font-size:11px">Nombre y firma del cliente<br>Fecha: _______________</div></div>
   </div>
-  ${notas?`<div class="notas"><b>Notas y condiciones:</b><br>${notas}</div>`:''}
-  <div class="footer">VAARQ · Arquitectura Villarreal · Aguascalientes, México · Este documento es una cotización y no constituye contrato.</div>
-  </body></html>`;
-
-  var w=window.open('','_blank','width=900,height=700');
-  if(w){ w.document.write(html); w.document.close(); }
-  else toast('⚠️ Permite ventanas emergentes para generar el PDF');
+  <div class="ft">Villarreal Arquitectura · arquitectura atemporal ® · contacto@vaarq.mx · Aguascalientes, México</div>
+  <script>window.onload=()=>window.print()<\/script>
+</body></html>`);
+  w.document.close();
 }
-</script>
-<!-- ═══════════════ FIN COTIZADOR LIBRE ═══════════════ -->
 
-<!-- ═══════════════ ASISTENTE IA ═══════════════ -->
-<style>
-#ai-fab{position:fixed;bottom:22px;right:22px;width:58px;height:58px;border-radius:50%;background:linear-gradient(135deg,#1B3A5C,#C9A84C);border:none;cursor:pointer;box-shadow:0 4px 20px rgba(0,0,0,.35);display:flex;align-items:center;justify-content:center;z-index:9999;transition:transform .2s}
-#ai-fab:active{transform:scale(.92)}
-#ai-fab svg{width:28px;height:28px}
-#ai-panel{position:fixed;bottom:92px;right:16px;width:360px;max-width:calc(100vw - 24px);height:520px;max-height:calc(100vh - 110px);background:#fff;border-radius:16px;box-shadow:0 8px 40px rgba(0,0,0,.25);display:none;flex-direction:column;z-index:9998;overflow:hidden;border:1px solid #e0e0e0}
-#ai-panel.open{display:flex}
-#ai-header{background:linear-gradient(135deg,#1B3A5C,#162f4a);padding:14px 16px;display:flex;align-items:center;gap:10px;flex-shrink:0}
-#ai-header img{height:28px;border-radius:4px;background:#1B3A5C;padding:2px 5px}
-#ai-header-text{flex:1;color:#fff}
-#ai-header-text div:first-child{font-weight:700;font-size:14px}
-#ai-header-text div:last-child{font-size:11px;color:#C9A84C;opacity:.9}
-#ai-close{background:none;border:none;color:#fff;font-size:20px;cursor:pointer;padding:0;line-height:1;opacity:.8}
-#ai-close:hover{opacity:1}
-#ai-messages{flex:1;overflow-y:auto;padding:12px;display:flex;flex-direction:column;gap:8px;background:#f7f8fb}
-.ai-msg{max-width:88%;padding:9px 12px;border-radius:12px;font-size:13px;line-height:1.5;word-break:break-word}
-.ai-msg.user{background:#1B3A5C;color:#fff;align-self:flex-end;border-bottom-right-radius:3px}
-.ai-msg.bot{background:#fff;color:#1a1a1a;align-self:flex-start;border-bottom-left-radius:3px;box-shadow:0 1px 4px rgba(0,0,0,.1)}
-.ai-msg.bot b{color:#1B3A5C}
-.ai-typing{align-self:flex-start;background:#fff;border-radius:12px;padding:10px 14px;box-shadow:0 1px 4px rgba(0,0,0,.1)}
-.ai-typing span{display:inline-block;width:7px;height:7px;background:#C9A84C;border-radius:50%;animation:bounce .9s infinite}
-.ai-typing span:nth-child(2){animation-delay:.2s}
-.ai-typing span:nth-child(3){animation-delay:.4s}
-@keyframes bounce{0%,60%,100%{transform:translateY(0)}30%{transform:translateY(-6px)}}
-#ai-footer{padding:10px;border-top:1px solid #eee;background:#fff;flex-shrink:0}
-#ai-key-bar{padding:10px;border-top:1px solid #eee;background:#fff8ee;flex-shrink:0;display:none}
-#ai-key-bar input{width:100%;border:1px solid #C9A84C;border-radius:8px;padding:7px 10px;font-size:12px;outline:none;box-sizing:border-box}
-#ai-key-bar button{margin-top:6px;width:100%;background:#C9A84C;color:#fff;border:none;border-radius:8px;padding:7px;font-size:12px;cursor:pointer;font-weight:600}
-#ai-input-row{display:flex;gap:8px;align-items:flex-end}
-#ai-input{flex:1;border:1px solid #ddd;border-radius:10px;padding:9px 12px;font-size:13px;outline:none;resize:none;max-height:90px;min-height:38px;font-family:inherit;line-height:1.4}
-#ai-input:focus{border-color:#1B3A5C}
-#ai-send{width:38px;height:38px;border-radius:10px;background:#1B3A5C;border:none;cursor:pointer;display:flex;align-items:center;justify-content:center;flex-shrink:0}
-#ai-send:disabled{background:#aaa;cursor:default}
-#ai-send svg{width:18px;height:18px}
-#ai-chips{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px}
-.ai-chip{background:#eef2f8;border:1px solid #d0daea;color:#1B3A5C;font-size:11px;padding:4px 9px;border-radius:20px;cursor:pointer;white-space:nowrap}
-.ai-chip:hover{background:#d0daea}
-</style>
-
-<!-- Botón flotante -->
-<button id="ai-fab" onclick="toggleAIPanel()" title="Asistente IA Villarreal">
-  <svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-    <path d="M12 2C6.48 2 2 6.48 2 12c0 1.85.5 3.58 1.38 5.06L2 22l4.94-1.38A9.94 9.94 0 0012 22c5.52 0 10-4.48 10-10S17.52 2 12 2z"/>
-    <circle cx="8" cy="12" r="1" fill="#fff" stroke="none"/>
-    <circle cx="12" cy="12" r="1" fill="#fff" stroke="none"/>
-    <circle cx="16" cy="12" r="1" fill="#fff" stroke="none"/>
-  </svg>
-</button>
-
-<!-- Panel de chat -->
-<div id="ai-panel">
-  <div id="ai-header">
-    <div id="ai-header-text">
-      <div>Asistente Villarreal</div>
-      <div>IA · arquitectura atemporal ®</div>
-    </div>
-    <button id="ai-close" onclick="toggleAIPanel()">✕</button>
-  </div>
-
-  <div id="ai-messages">
-    <div class="ai-msg bot">¡Hola! Soy tu asistente de <b>Villarreal Arquitectura</b>. Tengo acceso a todos tus proyectos, finanzas y datos del ERP. ¿En qué puedo ayudarte?</div>
-  </div>
-
-  <!-- Chips de acceso rápido -->
-  <div style="padding:8px 10px 0;background:#f7f8fb;flex-shrink:0">
-    <div id="ai-chips">
-      <div class="ai-chip" onclick="sendChip(this)">¿Cómo están mis proyectos?</div>
-      <div class="ai-chip" onclick="sendChip(this)">Resumen financiero</div>
-      <div class="ai-chip" onclick="sendChip(this)">¿Qué proyectos tienen alerta?</div>
-      <div class="ai-chip" onclick="sendChip(this)">Próximos cobros</div>
-    </div>
-  </div>
-
-  <div id="ai-key-bar">
-    <div style="font-size:11px;color:#666;margin-bottom:5px">🔑 Ingresa tu API Key de Anthropic para activar el asistente:</div>
-    <input type="password" id="ai-key-input" placeholder="sk-ant-...">
-    <button onclick="saveAPIKey()">Guardar y activar</button>
-  </div>
-
-  <div id="ai-footer">
-    <div id="ai-input-row">
-      <textarea id="ai-input" placeholder="Escribe tu pregunta..." rows="1" onkeydown="aiKeyDown(event)" oninput="autoResize(this)"></textarea>
-      <button id="ai-send" onclick="sendAIMessage()" disabled>
-        <svg viewBox="0 0 24 24" fill="#fff"><path d="M2 21l21-9L2 3v7l15 2-15 2z"/></svg>
-      </button>
-    </div>
-  </div>
-</div>
-
-<script>
 var AI_KEY = localStorage.getItem('vaarq_ai_key') || '';
 var aiHistory = [];
 var aiTyping = false;
@@ -5478,6 +5532,7 @@ function checkAIKey() {
   var keyBar = document.getElementById('ai-key-bar');
   var sendBtn = document.getElementById('ai-send');
   var inp = document.getElementById('ai-input');
+  if (!keyBar || !sendBtn || !inp) return; // elementos aún no en DOM
   if (!AI_KEY) {
     keyBar.style.display = 'block';
     sendBtn.disabled = true;
