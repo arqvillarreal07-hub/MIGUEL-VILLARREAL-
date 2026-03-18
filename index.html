@@ -407,6 +407,39 @@ const DB={
   ],
   destajos:[],
   preauth:[],  // movimientos pendientes de autorización
+  planplanos:[
+    {id:'PLP-001',pid:'TER-OF-01',disciplina:'Planos Sanitarios',notas:'Planos necesarios para permisos',orden:1,
+      planos:[
+        {nombre:'Planta Sótano',estatus:'terminado',semana:2,comentarios:''},
+        {nombre:'Planta Sótano (Plafón)',estatus:'terminado',semana:2,comentarios:''},
+        {nombre:'Planta Acceso',estatus:'terminado',semana:2,comentarios:''},
+        {nombre:'Planta Acceso (Plafón)',estatus:'terminado',semana:2,comentarios:''},
+        {nombre:'Planta Tipo',estatus:'terminado',semana:2,comentarios:''},
+        {nombre:'Planta Roof Top',estatus:'terminado',semana:2,comentarios:''},
+        {nombre:'Planta Azoteas',estatus:'terminado',semana:2,comentarios:''},
+        {nombre:'Corte A',estatus:'cambios',semana:2,comentarios:''},
+        {nombre:'Corte D',estatus:'cambios',semana:2,comentarios:''},
+        {nombre:'Corte Terra Plus',estatus:'cambios',semana:2,comentarios:''},
+        {nombre:'Corte Terral Loft',estatus:'cambios',semana:2,comentarios:''},
+        {nombre:'Tabla de Elementos San.',estatus:'cambios',semana:2,comentarios:''},
+        {nombre:'Pluvial Acceso',estatus:'sinempezar',semana:2,comentarios:''},
+        {nombre:'Pluvial Sótano',estatus:'sinempezar',semana:2,comentarios:''},
+      ]},
+    {id:'PLP-002',pid:'TER-OF-01',disciplina:'Planos Hidráulicos',notas:'',orden:2,
+      planos:[
+        {nombre:'Planta Sótano',estatus:'sinempezar',semana:2,comentarios:''},
+        {nombre:'Planta Acceso',estatus:'cambios',semana:2,comentarios:''},
+        {nombre:'Planta Tipo',estatus:'cambios',semana:2,comentarios:''},
+        {nombre:'Planta Roof Top',estatus:'cambios',semana:2,comentarios:''},
+        {nombre:'Planta Azoteas',estatus:'sinempezar',semana:2,comentarios:''},
+        {nombre:'Corte A',estatus:'sinempezar',semana:2,comentarios:''},
+        {nombre:'Corte D',estatus:'sinempezar',semana:2,comentarios:''},
+        {nombre:'Detalle Terra Plus',estatus:'sinempezar',semana:2,comentarios:''},
+        {nombre:'Detalle Terral Loft',estatus:'sinempezar',semana:2,comentarios:''},
+        {nombre:'Detalle Roof Top',estatus:'sinempezar',semana:2,comentarios:''},
+        {nombre:'Tabla de Elementos',estatus:'sinempezar',semana:2,comentarios:''},
+      ]},
+  ],
   personal:[
     {id:1,nombre:'Carlos Martínez Ramos',puesto:'Maestro de obra',tipo:'Nómina',salario:18000,nss:'123456789012',curp:'MARC850101HAGLRR01',rfc:'MARC850101XY0',telefono:'449 100 1001',email:'carlos@obra.mx',banco:'BBVA',cuenta:'****1234',pid:'CF-OBR-01',activo:true,alta:'2024-10-01'},
     {id:2,nombre:'José Luis Pérez',puesto:'Albañil',tipo:'Nómina',salario:12000,nss:'234567890123',curp:'PELJ900215HAGLRR02',rfc:'PELJ900215YZ0',telefono:'449 100 1002',email:'',banco:'Santander',cuenta:'****5678',pid:'CF-OBR-01',activo:true,alta:'2024-10-01'},
@@ -517,16 +550,26 @@ function tryPin(){
   else{$('pe').textContent='PIN incorrecto. Intenta de nuevo.';pin='';udots();setTimeout(()=>$('pe').textContent='',2000)}
 }
 function loginOK(){
-  $('LS').style.display='none';
-  $('app').classList.add('v');
-  $('AV').textContent=DB.user.ini;
-  $('AV').style.background=DB.user.col;
-  $('UN').textContent=DB.user.name.split(' ')[0];
-  var startPage = canSee('dashboard') ? 'dashboard' : (PERMISOS[DB.user.id]||[])[0]||'proyectos';
-  goTo(startPage);
-  buildSidebar();
-  finFabVisible(true);
-  setTimeout(updateProyBadge,100);
+  try {
+    $('LS').style.display='none';
+    $('app').classList.add('v');
+    $('AV').textContent=DB.user.ini;
+    $('AV').style.background=DB.user.col;
+    $('UN').textContent=DB.user.name.split(' ')[0];
+    var startPage = canSee('dashboard') ? 'dashboard' : (PERMISOS[DB.user.id]||[])[0]||'proyectos';
+    buildSidebar();
+    goTo(startPage);
+    finFabVisible(true);
+    setTimeout(updateProyBadge,100);
+  } catch(e) {
+    console.error('loginOK error:', e);
+    // Mostrar error visible para diagnóstico
+    document.body.insertAdjacentHTML('beforeend',
+      `<div style="position:fixed;top:0;left:0;right:0;background:#c00;color:#fff;padding:14px;z-index:99999;font-size:13px;font-family:monospace;word-break:break-all">
+        ⚠️ Error al entrar: ${e.message}<br>${e.stack||''}
+      </div>`
+    );
+  }
 }
 function logout(){DB.user=null;pin='';udots();$('LS').style.display='flex';$('app').classList.remove('v');document.getElementById('SB_NAV').innerHTML='';finFabVisible(false);document.getElementById('fin-panel').classList.remove('open');}
 
@@ -534,11 +577,11 @@ function logout(){DB.user=null;pin='';udots();$('LS').style.display='flex';$('ap
 const PERMISOS = {
   1: ['dashboard','autorizaciones','crm','proyectos','cotizaciones','planproyecto','obras','bitacora','proyeccion',
       'finanzas','compras','proveedores','partidas','cotizador','cotizadorlibre','caja','documentos','portal',
-      'estadocuenta','destajos','personal'],                                 // Miguel — todo
+      'estadocuenta','destajos','personal','entregaplanos'],                 // Miguel — todo
   2: ['proyectos','cotizaciones','planproyecto','obras','bitacora',
-      'cotizador','cotizadorlibre','documentos','portal'],                   // Alejandro — Proyectos
+      'cotizador','cotizadorlibre','documentos','portal','entregaplanos'],   // Alejandro — Proyectos
   3: ['obras','bitacora','proyectos','proyeccion','partidas',
-      'compras','documentos','caja','personal'],                              // Luis — Construcción
+      'compras','documentos','caja','personal','entregaplanos'],             // Luis — Construcción
   4: ['dashboard','crm','proyectos','finanzas','estadocuenta',
       'compras','proveedores','caja','documentos','personal'],               // Administración
 };
@@ -563,6 +606,7 @@ const NAV_ITEMS = {
   ],
   'Obra': [
     {p:'planproyecto',ico:'📅', lbl:'Plan de Proyecto'},
+    {p:'entregaplanos',ico:'📐', lbl:'Entrega de Planos'},
     {p:'obras',       ico:'🏗️', lbl:'Obras'},
     {p:'bitacora',    ico:'📓', lbl:'Bitácora'},
     {p:'proyeccion',  ico:'📅', lbl:'Proyección Semanal', badge:'proy_badge'},
@@ -611,7 +655,7 @@ function goTo(page){
   }
   document.querySelectorAll('.nv').forEach(el=>el.classList.toggle('act',el.dataset.p===page));
   $('MN').innerHTML='';
-  const map={dashboard:rDash,crm:rCRM,proyectos:rProj,cotizaciones:rCots,obras:rObras,bitacora:rBit,proyeccion:rProyeccion,finanzas:rFin,compras:rComp,proveedores:rProv,partidas:rPartidas,cotizador:rCotizador,cotizadorlibre:rCotizadorLibre,caja:rCaja,documentos:rDocs,portal:rPortal,estadocuenta:rEstadoCuenta,planproyecto:rPlanProyecto,autorizaciones:rAutorizaciones,personal:rPersonal};
+  const map={dashboard:rDash,crm:rCRM,proyectos:rProj,cotizaciones:rCots,obras:rObras,bitacora:rBit,proyeccion:rProyeccion,finanzas:rFin,compras:rComp,proveedores:rProv,partidas:rPartidas,cotizador:rCotizador,cotizadorlibre:rCotizadorLibre,caja:rCaja,documentos:rDocs,portal:rPortal,estadocuenta:rEstadoCuenta,planproyecto:rPlanProyecto,autorizaciones:rAutorizaciones,personal:rPersonal,entregaplanos:rEntregaPlanos};
   if(map[page]) map[page]();
   window._currentPage = page;
   if(window.innerWidth<768){$('SB').classList.remove('open');$('OV').classList.remove('open')}
@@ -5106,6 +5150,540 @@ function persToggleActivo(id){
 }
 </script>
 <!-- ═══════════════ FIN PERSONAL ═══════════════ -->
+
+
+<!-- ═══════════════ ENTREGA DE PLANOS ═══════════════ -->
+<script>
+var _ep_pid = null;        // proyecto seleccionado
+var _ep_disc = null;       // disciplina activa (id PLP-xxx)
+var _ep_editDisc = null;   // modal edición disciplina
+
+// ── Colores y etiquetas de estatus ──
+var EP_EST = {
+  terminado:  {label:'Terminado',  color:'#2E7D32', bg:'#E8F5E9', dot:'#4CAF50'},
+  cambios:    {label:'Cambios',    color:'#1565C0', bg:'#E3F2FD', dot:'#42A5F5'},
+  enproceso:  {label:'En proceso', color:'#E65100', bg:'#FFF3E0', dot:'#FFA726'},
+  sinempezar: {label:'Sin empezar',color:'#C62828', bg:'#FFEBEE', dot:'#EF5350'},
+};
+
+// ── Disciplinas predefinidas ──
+var EP_DISC_TEMPLATES = [
+  'Planos Arquitectónicos','Planos Sanitarios','Planos Hidráulicos',
+  'Planos Eléctricos','Sembrado Eléctrico','Aire Acondicionado',
+  'Planos Estructurales','Planos Albañilerías','Planos Tablaroca',
+  'Planos Acabados','Planos de Cancelería','Planos Exteriores',
+];
+
+function rEntregaPlanos() {
+  if(!DB.planplanos) DB.planplanos = [];
+  var proyectos = DB.projects || [];
+
+  if(!_ep_pid && proyectos.length > 0) _ep_pid = proyectos[0].id;
+
+  var proy = proyectos.find(p => p.id === _ep_pid);
+  var discs = (_ep_pid ? DB.planplanos.filter(d => d.pid === _ep_pid) : []).sort((a,b)=>a.orden-b.orden);
+
+  $('MN').innerHTML = `
+  <div class="ph3">
+    <div>
+      <div class="pt">📐 Entrega de Planos</div>
+      <div class="ps">Control de disciplinas y estatus por semana</div>
+    </div>
+    <button class="btn bp" onclick="epNuevaDisc()">+ Disciplina</button>
+  </div>
+
+  <!-- Selector de proyecto -->
+  <div class="card" style="padding:12px 16px;margin-bottom:0">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <span style="font-size:12px;font-weight:700;color:var(--g4);text-transform:uppercase;letter-spacing:.5px">Proyecto</span>
+      <select onchange="epCambiarProy(this.value)" style="flex:1;min-width:200px;padding:8px 12px;border:1.5px solid var(--g2);border-radius:8px;font-size:14px;font-weight:600;color:var(--navy);background:#fff">
+        ${proyectos.map(p=>`<option value="${p.id}" ${p.id===_ep_pid?'selected':''}>${p.name} · ${p.id}</option>`).join('')}
+      </select>
+      ${proy ? `<span class="bdg bgrn">${proy.status}</span>` : ''}
+      <button class="btn bo bsm" onclick="epExportPDF()">⬇️ PDF</button>
+    </div>
+  </div>
+
+  <!-- Resumen de avance general -->
+  ${discs.length > 0 ? epRenderResumen(discs) : ''}
+
+  <!-- Lista de disciplinas -->
+  ${discs.length === 0 ? `
+    <div class="card" style="text-align:center;padding:60px 24px;color:var(--g4)">
+      <div style="font-size:48px;margin-bottom:12px">📐</div>
+      <div style="font-size:16px;font-weight:700;color:var(--g5);margin-bottom:6px">Sin disciplinas</div>
+      <div style="font-size:13px;margin-bottom:20px">Agrega disciplinas (Sanitarios, Eléctrico, Estructural, etc.) para controlar la entrega de planos</div>
+      <button class="btn bp" onclick="epNuevaDisc()">+ Agregar primera disciplina</button>
+    </div>
+  ` : discs.map(d => epRenderDisc(d)).join('')}
+  `;
+}
+
+function epRenderResumen(discs) {
+  var total = 0, term = 0, camb = 0, proc = 0, sin = 0;
+  discs.forEach(d => {
+    d.planos.forEach(p => {
+      total++;
+      if(p.estatus==='terminado') term++;
+      else if(p.estatus==='cambios') camb++;
+      else if(p.estatus==='enproceso') proc++;
+      else sin++;
+    });
+  });
+  var pct = total > 0 ? Math.round(term/total*100) : 0;
+  return `
+  <div class="card" style="padding:16px">
+    <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap">
+      <div style="flex:1;min-width:180px">
+        <div style="font-size:11px;font-weight:700;color:var(--g4);text-transform:uppercase;letter-spacing:.5px;margin-bottom:6px">Avance general · ${discs.length} disciplinas</div>
+        <div style="display:flex;gap:8px;margin-bottom:8px;flex-wrap:wrap">
+          ${epBadge('✅ '+term,'terminado')}${epBadge('🔵 '+camb,'cambios')}${epBadge('🟡 '+proc,'enproceso')}${epBadge('🔴 '+sin,'sinempezar')}
+        </div>
+        <div style="background:var(--g2);border-radius:6px;height:8px;overflow:hidden">
+          <div style="height:100%;border-radius:6px;background:linear-gradient(90deg,#2E7D32,#4CAF50);width:${pct}%;transition:width .4s"></div>
+        </div>
+        <div style="font-size:11px;color:var(--g4);margin-top:4px">${pct}% de planos terminados · ${total} planos totales</div>
+      </div>
+      <div style="font-size:42px;font-weight:900;color:var(--navy);min-width:80px;text-align:right">${pct}<span style="font-size:18px">%</span></div>
+    </div>
+  </div>`;
+}
+
+function epBadge(txt, est) {
+  var e = EP_EST[est] || {};
+  return `<span style="background:${e.bg};color:${e.color};padding:4px 10px;border-radius:20px;font-size:11px;font-weight:700">${txt}</span>`;
+}
+
+function epRenderDisc(d) {
+  var total = d.planos.length;
+  var term  = d.planos.filter(p=>p.estatus==='terminado').length;
+  var pct   = total > 0 ? Math.round(term/total*100) : 0;
+
+  // Agrupar semanas
+  var semanas = [...new Set(d.planos.map(p=>p.semana))].sort((a,b)=>a-b);
+
+  return `
+  <div class="card" style="overflow:hidden">
+    <!-- Header disciplina -->
+    <div style="display:flex;align-items:center;gap:12px;padding:14px 16px;border-bottom:1px solid var(--g2);cursor:pointer" onclick="epToggleDisc('${d.id}')">
+      <div style="flex:1;min-width:0">
+        <div style="font-size:15px;font-weight:800;color:var(--navy)">${d.disciplina}</div>
+        ${d.notas ? `<div style="font-size:11px;color:var(--g4);margin-top:2px">${d.notas}</div>` : ''}
+      </div>
+      <div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap">
+        <span style="font-size:11px;color:var(--g4)">${term}/${total} planos</span>
+        <div style="background:var(--g2);border-radius:20px;height:6px;width:80px;overflow:hidden">
+          <div style="height:100%;background:var(--green);border-radius:20px;width:${pct}%"></div>
+        </div>
+        <span style="font-size:13px;font-weight:800;color:${pct===100?'var(--green)':'var(--navy)'}">${pct}%</span>
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn bo bsm" onclick="event.stopPropagation();epEditarDisc('${d.id}')">✏️</button>
+        <button class="btn bsm" style="background:var(--rbg);color:var(--red);border:1px solid var(--red)" onclick="event.stopPropagation();epEliminarDisc('${d.id}')">🗑️</button>
+      </div>
+      <span style="color:var(--g3);font-size:18px" id="ep_chevron_${d.id}">▼</span>
+    </div>
+
+    <!-- Tabla de planos -->
+    <div id="ep_body_${d.id}">
+      <!-- Leyenda colores -->
+      <div style="display:flex;gap:12px;padding:10px 16px;background:var(--g1);flex-wrap:wrap">
+        ${Object.entries(EP_EST).map(([k,v])=>`
+          <span style="display:flex;align-items:center;gap:5px;font-size:11px;font-weight:600;color:${v.color}">
+            <span style="width:10px;height:10px;border-radius:50%;background:${v.dot};display:inline-block"></span>${v.label}
+          </span>`).join('')}
+        <button class="btn bgrn bsm" style="margin-left:auto" onclick="epAgregarPlano('${d.id}')">+ Plano</button>
+      </div>
+
+      <!-- Tabla -->
+      <div class="tw" style="overflow-x:auto">
+        <table style="width:100%;border-collapse:collapse;min-width:480px">
+          <thead>
+            <tr style="background:var(--g1)">
+              <th style="padding:9px 14px;text-align:left;font-size:11px;color:var(--g4);font-weight:700;min-width:160px">PLANO</th>
+              <th style="padding:9px 14px;text-align:center;font-size:11px;color:var(--g4);font-weight:700;width:130px">ESTATUS</th>
+              <th style="padding:9px 14px;text-align:center;font-size:11px;color:var(--g4);font-weight:700;width:90px">SEMANA</th>
+              <th style="padding:9px 14px;text-align:left;font-size:11px;color:var(--g4);font-weight:700">COMENTARIOS</th>
+              <th style="padding:9px 14px;width:40px"></th>
+            </tr>
+          </thead>
+          <tbody>
+            ${d.planos.map((p,i) => epRenderFila(d.id, i, p)).join('')}
+          </tbody>
+        </table>
+      </div>
+
+      <!-- Semanas resumen -->
+      ${semanas.length > 0 ? `
+      <div style="padding:10px 16px;border-top:1px solid var(--g2);display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+        <span style="font-size:11px;font-weight:700;color:var(--g4);text-transform:uppercase">Semanas:</span>
+        ${semanas.map(s => {
+          var ps = d.planos.filter(p=>p.semana===s);
+          var ts = ps.filter(p=>p.estatus==='terminado').length;
+          return `<span style="background:var(--navy);color:#fff;padding:4px 12px;border-radius:20px;font-size:12px;font-weight:700">SEM. ${s} <span style="opacity:.7;font-size:10px">(${ts}/${ps.length})</span></span>`;
+        }).join('')}
+      </div>` : ''}
+    </div>
+  </div>`;
+}
+
+function epRenderFila(did, idx, p) {
+  var e = EP_EST[p.estatus] || EP_EST.sinempezar;
+  return `
+  <tr style="border-top:1px solid var(--g1)">
+    <td style="padding:9px 14px;font-size:13px;font-weight:600;color:var(--g5)">${p.nombre}</td>
+    <td style="padding:9px 14px;text-align:center">
+      <select onchange="epCambiarEst('${did}',${idx},this.value)"
+        style="padding:5px 8px;border:1.5px solid ${e.color}33;border-radius:20px;font-size:11px;font-weight:700;color:${e.color};background:${e.bg};cursor:pointer;width:115px">
+        ${Object.entries(EP_EST).map(([k,v])=>`<option value="${k}" ${k===p.estatus?'selected':''}>${v.label}</option>`).join('')}
+      </select>
+    </td>
+    <td style="padding:9px 14px;text-align:center">
+      <select onchange="epCambiarSem('${did}',${idx},this.value)"
+        style="padding:5px 8px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px;font-weight:700;color:var(--navy);background:#fff;width:70px">
+        ${[1,2,3,4,5,6,7,8,9,10,11,12].map(n=>`<option value="${n}" ${n===p.semana?'selected':''}>Sem. ${n}</option>`).join('')}
+      </select>
+    </td>
+    <td style="padding:9px 14px">
+      <input value="${p.comentarios||''}" placeholder="—" onblur="epCambiarCom('${did}',${idx},this.value)"
+        style="width:100%;border:none;background:transparent;font-size:12px;color:var(--g5);outline:none;padding:2px 0;border-bottom:1px solid transparent"
+        onfocus="this.style.borderBottom='1px solid var(--navy)'"
+        onblur="this.style.borderBottom='1px solid transparent';epCambiarCom('${did}',${idx},this.value)">
+    </td>
+    <td style="padding:9px 8px;text-align:center">
+      <button onclick="epEliminarPlano('${did}',${idx})" style="background:none;border:none;cursor:pointer;color:var(--g3);font-size:14px;padding:2px 6px" title="Eliminar">✕</button>
+    </td>
+  </tr>`;
+}
+
+function epToggleDisc(id) {
+  var body = document.getElementById('ep_body_'+id);
+  var chev = document.getElementById('ep_chevron_'+id);
+  if(!body) return;
+  var hidden = body.style.display === 'none';
+  body.style.display = hidden ? '' : 'none';
+  if(chev) chev.textContent = hidden ? '▼' : '▶';
+}
+
+function epCambiarProy(pid) {
+  _ep_pid = pid;
+  rEntregaPlanos();
+}
+
+function epCambiarEst(did, idx, val) {
+  var d = DB.planplanos.find(x=>x.id===did);
+  if(d && d.planos[idx]) { d.planos[idx].estatus = val; epRefreshDisc(did); }
+}
+function epCambiarSem(did, idx, val) {
+  var d = DB.planplanos.find(x=>x.id===did);
+  if(d && d.planos[idx]) { d.planos[idx].semana = parseInt(val); }
+}
+function epCambiarCom(did, idx, val) {
+  var d = DB.planplanos.find(x=>x.id===did);
+  if(d && d.planos[idx]) d.planos[idx].comentarios = val;
+}
+
+function epRefreshDisc(did) {
+  // Re-render solo esa disciplina en el DOM
+  var d = DB.planplanos.find(x=>x.id===did);
+  if(!d) return;
+  // Re-render resumen
+  rEntregaPlanos();
+}
+
+function epEliminarPlano(did, idx) {
+  var d = DB.planplanos.find(x=>x.id===did);
+  if(!d) return;
+  d.planos.splice(idx, 1);
+  rEntregaPlanos();
+}
+
+function epAgregarPlano(did) {
+  var d = DB.planplanos.find(x=>x.id===did);
+  if(!d) return;
+  om('➕ Agregar plano — ' + d.disciplina, `
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="font-size:12px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">NOMBRE DEL PLANO</label>
+        <input id="ep_np_nombre" placeholder="ej. Planta Tipo, Corte A, Fachada Principal..."
+          style="width:100%;padding:10px 12px;border:1.5px solid var(--g2);border-radius:8px;font-size:14px">
+      </div>
+      <div class="fr2">
+        <div>
+          <label style="font-size:12px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">ESTATUS</label>
+          <select id="ep_np_est" style="width:100%;padding:10px 12px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px">
+            ${Object.entries(EP_EST).map(([k,v])=>`<option value="${k}">${v.label}</option>`).join('')}
+          </select>
+        </div>
+        <div>
+          <label style="font-size:12px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">SEMANA</label>
+          <select id="ep_np_sem" style="width:100%;padding:10px 12px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px">
+            ${[1,2,3,4,5,6,7,8,9,10,11,12].map(n=>`<option value="${n}">Sem. ${n}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">COMENTARIOS (opcional)</label>
+        <input id="ep_np_com" placeholder="Notas..." style="width:100%;padding:10px 12px;border:1.5px solid var(--g2);border-radius:8px;font-size:14px">
+      </div>
+    </div>`,
+    `<button class="btn" onclick="cm()" style="background:var(--g2);color:var(--g5)">Cancelar</button>
+     <button class="btn bp" onclick="epGuardarPlano('${did}')">Agregar plano</button>`
+  );
+  // modal ya abierto por om()
+  setTimeout(()=>{ var el=document.getElementById('ep_np_nombre'); if(el)el.focus(); }, 100);
+}
+
+function epGuardarPlano(did) {
+  var nombre = (document.getElementById('ep_np_nombre')||{}).value.trim();
+  if(!nombre) { toast('⚠️ Ingresa el nombre del plano'); return; }
+  var est = (document.getElementById('ep_np_est')||{}).value || 'sinempezar';
+  var sem = parseInt((document.getElementById('ep_np_sem')||{}).value) || 1;
+  var com = (document.getElementById('ep_np_com')||{}).value.trim();
+  var d = DB.planplanos.find(x=>x.id===did);
+  if(!d) return;
+  d.planos.push({ nombre, estatus: est, semana: sem, comentarios: com });
+  cm(); rEntregaPlanos(); toast('✅ Plano agregado');
+}
+
+function epNuevaDisc() {
+  om('📐 Nueva Disciplina', `
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="font-size:12px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">NOMBRE DE LA DISCIPLINA</label>
+        <input id="ep_nd_nom" list="ep_disc_list" placeholder="ej. Planos Sanitarios, Eléctrico..."
+          style="width:100%;padding:10px 12px;border:1.5px solid var(--g2);border-radius:8px;font-size:14px">
+        <datalist id="ep_disc_list">
+          ${EP_DISC_TEMPLATES.map(t=>`<option value="${t}">`).join('')}
+        </datalist>
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">NOTAS / OBSERVACIONES</label>
+        <input id="ep_nd_notas" placeholder="ej. Planos necesarios para permisos..."
+          style="width:100%;padding:10px 12px;border:1.5px solid var(--g2);border-radius:8px;font-size:14px">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:700;color:var(--g4);display:block;margin-bottom:6px">PLANOS INICIALES (uno por línea, opcional)</label>
+        <textarea id="ep_nd_planos" rows="5" placeholder="Planta Sótano&#10;Planta Acceso&#10;Planta Tipo&#10;Planta Roof Top&#10;Fachada Principal"
+          style="width:100%;padding:10px 12px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;resize:vertical"></textarea>
+      </div>
+    </div>`,
+    `<button class="btn" onclick="cm()" style="background:var(--g2);color:var(--g5)">Cancelar</button>
+     <button class="btn bp" onclick="epGuardarDisc()">Crear disciplina</button>`
+  );
+  // modal ya abierto por om()
+  setTimeout(()=>{ var el=document.getElementById('ep_nd_nom'); if(el)el.focus(); }, 100);
+}
+
+function epGuardarDisc() {
+  var nom = (document.getElementById('ep_nd_nom')||{}).value.trim();
+  if(!nom) { toast('⚠️ Ingresa el nombre de la disciplina'); return; }
+  var notas = (document.getElementById('ep_nd_notas')||{}).value.trim();
+  var raw = (document.getElementById('ep_nd_planos')||{}).value.trim();
+  var planos = raw ? raw.split('\n').filter(l=>l.trim()).map(l=>({
+    nombre: l.trim(), estatus:'sinempezar', semana:1, comentarios:''
+  })) : [];
+
+  var max = DB.planplanos.reduce((m,d)=>Math.max(m,d.orden||0),0);
+  var pid = _ep_pid || (DB.projects[0]||{}).id;
+  DB.planplanos.push({
+    id: 'PLP-' + String(Date.now()).slice(-5),
+    pid, disciplina: nom, notas, orden: max+1, planos
+  });
+  cm(); rEntregaPlanos(); toast('✅ Disciplina creada');
+}
+
+function epEditarDisc(did) {
+  var d = DB.planplanos.find(x=>x.id===did);
+  if(!d) return;
+  om('✏️ Editar Disciplina', `
+    <div style="display:flex;flex-direction:column;gap:14px">
+      <div>
+        <label style="font-size:12px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">NOMBRE</label>
+        <input id="ep_ed_nom" value="${d.disciplina}"
+          style="width:100%;padding:10px 12px;border:1.5px solid var(--g2);border-radius:8px;font-size:14px">
+      </div>
+      <div>
+        <label style="font-size:12px;font-weight:700;color:var(--g4);display:block;margin-bottom:4px">NOTAS</label>
+        <input id="ep_ed_notas" value="${d.notas||''}"
+          style="width:100%;padding:10px 12px;border:1.5px solid var(--g2);border-radius:8px;font-size:14px">
+      </div>
+    </div>`,
+    `<button class="btn" onclick="cm()" style="background:var(--g2);color:var(--g5)">Cancelar</button>
+     <button class="btn bp" onclick="epGuardarEditDisc('${did}')">Guardar</button>`
+  );
+  // modal ya abierto por om()
+}
+
+function epGuardarEditDisc(did) {
+  var d = DB.planplanos.find(x=>x.id===did);
+  if(!d) return;
+  d.disciplina = (document.getElementById('ep_ed_nom')||{}).value.trim() || d.disciplina;
+  d.notas = (document.getElementById('ep_ed_notas')||{}).value.trim();
+  cm(); rEntregaPlanos(); toast('✅ Disciplina actualizada');
+}
+
+function epEliminarDisc(did) {
+  if(!confirm('¿Eliminar esta disciplina y todos sus planos?')) return;
+  DB.planplanos = DB.planplanos.filter(x=>x.id!==did);
+  rEntregaPlanos(); toast('🗑️ Disciplina eliminada');
+}
+
+// ── PDF — Genera láminas tipo TERRAL ──
+function epExportPDF() {
+  if(!_ep_pid) { toast('⚠️ Selecciona un proyecto'); return; }
+  var proy = DB.projects.find(p=>p.id===_ep_pid) || {};
+  var discs = DB.planplanos.filter(d=>d.pid===_ep_pid).sort((a,b)=>a.orden-b.orden);
+  if(!discs.length) { toast('⚠️ Sin disciplinas para exportar'); return; }
+
+  var paginas = discs.map((d,di) => {
+    var total = d.planos.length;
+    var counts = {terminado:0,cambios:0,enproceso:0,sinempezar:0};
+    d.planos.forEach(p=>{ if(counts[p.estatus]!==undefined) counts[p.estatus]++; });
+
+    // Donut SVG
+    var donut = epDonutSVG(d.planos);
+
+    // Semanas únicas
+    var semanas = [...new Set(d.planos.map(p=>p.semana))].sort((a,b)=>a-b);
+
+    return `
+    <!DOCTYPE html><html><head><meta charset="UTF-8">
+    <style>
+      *{margin:0;padding:0;box-sizing:border-box}
+      body{width:297mm;height:210mm;font-family:'Helvetica Neue',Arial,sans-serif;overflow:hidden;background:#fff;display:flex}
+      .sidebar{width:200px;min-width:200px;padding:24px 20px;display:flex;flex-direction:column;gap:16px;border-right:1px solid #e0e0e0}
+      .main{flex:1;padding:28px 32px;display:flex;flex-direction:column;gap:16px}
+      .disc-title{font-size:22px;font-weight:900;color:#1B3A5C;letter-spacing:-.5px;text-transform:uppercase}
+      table{width:100%;border-collapse:collapse;font-size:11px}
+      th{padding:7px 10px;text-align:left;color:#8A96A8;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;border-bottom:2px solid #E8EDF3;background:#F5F7FA}
+      td{padding:7px 10px;border-bottom:1px solid #F0F4F8;color:#4A5568;font-size:11px}
+      .dot{display:inline-block;width:28px;height:14px;border-radius:20px}
+      .leg{display:flex;align-items:center;gap:6px;font-size:10px;color:#4A5568;font-weight:600}
+      .logo-area{margin-top:auto;border-top:1px solid #E8EDF3;padding-top:14px}
+      .pag-num{font-size:11px;color:#8A96A8;font-weight:700}
+      .nota-label{font-size:9px;font-weight:800;color:#8A96A8;text-transform:uppercase;letter-spacing:.5px}
+      .nota-val{font-size:11px;color:#4A5568;margin-top:3px;line-height:1.4}
+      .semana-chip{display:inline-block;background:#1B3A5C;color:#fff;padding:4px 12px;border-radius:20px;font-size:11px;font-weight:700;margin:2px 3px 0 0}
+    </style>
+    </head><body>
+    <div class="sidebar">
+      <div class="pag-num">${di+1} de ${discs.length}</div>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-top:4px">
+        <div class="leg"><div class="dot" style="background:#4CAF50"></div>Terminado</div>
+        <div class="leg"><div class="dot" style="background:#42A5F5"></div>Cambios</div>
+        <div class="leg"><div class="dot" style="background:#FFA726"></div>En proceso</div>
+        <div class="leg"><div class="dot" style="background:#EF5350"></div>Sin empezar</div>
+      </div>
+      ${d.notas ? `<div style="margin-top:8px"><div class="nota-label">Notas:</div><div class="nota-val">${d.notas}</div></div>` : ''}
+      ${semanas.length ? `<div style="margin-top:8px">
+        <div class="nota-label">Semanas</div>
+        <div style="margin-top:6px">${semanas.map(s=>`<span class="semana-chip">SEM. ${s}</span>`).join('')}</div>
+      </div>` : ''}
+      <div class="logo-area">
+        <div style="font-size:18px;font-weight:900;color:#1B3A5C;letter-spacing:-1px;text-transform:uppercase">${proy.name||_ep_pid}</div>
+        <div style="font-size:9px;color:#8A96A8;font-weight:700;text-transform:uppercase;letter-spacing:1px;margin-top:2px">Proyecto Ejecutivo</div>
+        <div style="margin-top:10px;font-size:9px;color:#C5CDD9;font-weight:700;text-transform:uppercase;letter-spacing:1px">ARQUITECTURA<br>VILLARREAL</div>
+      </div>
+    </div>
+    <div class="main">
+      <div style="display:flex;align-items:flex-start;gap:24px">
+        <div style="flex:1">
+          <div class="disc-title">${d.disciplina}</div>
+          <div style="margin-top:12px;max-height:155mm;overflow:hidden">
+            <table>
+              <thead><tr><th style="min-width:160px">Plano</th><th style="width:90px;text-align:center">Estatus</th><th style="width:70px;text-align:center">Fecha</th><th>Comentarios</th></tr></thead>
+              <tbody>
+                ${d.planos.map(p=>{
+                  var e=EP_EST[p.estatus]||EP_EST.sinempezar;
+                  return `<tr>
+                    <td style="font-weight:600">${p.nombre}</td>
+                    <td style="text-align:center"><div class="dot" style="background:${e.dot};margin:0 auto"></div></td>
+                    <td style="text-align:center;font-weight:700;color:#1B3A5C">SEM. ${p.semana}</td>
+                    <td style="color:#8A96A8">${p.comentarios||''}</td>
+                  </tr>`;
+                }).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>
+        <div style="width:200px;flex-shrink:0">${donut}</div>
+      </div>
+    </div>
+    </body></html>`;
+  });
+
+  // Abrir ventana con todas las páginas para imprimir
+  var win = window.open('','_blank','width=1200,height=800');
+  win.document.write(`<!DOCTYPE html><html><head><meta charset="UTF-8">
+  <style>
+    body{margin:0;background:#888}
+    .pagina{width:297mm;height:210mm;margin:10mm auto;box-shadow:0 4px 20px rgba(0,0,0,.3);background:#fff;display:block;overflow:hidden}
+    .pagina iframe{width:100%;height:100%;border:none}
+    @media print{body{background:#fff}.pagina{margin:0;box-shadow:none;page-break-after:always}}
+  </style>
+  </head><body>`);
+
+  paginas.forEach(html => {
+    var encoded = encodeURIComponent(html);
+    win.document.write(`<div class="pagina"><iframe src="data:text/html;charset=utf-8,${encoded}"></iframe></div>`);
+  });
+
+  win.document.write(`
+  <div style="text-align:center;padding:20px">
+    <button onclick="window.print()" style="padding:12px 32px;background:#1B3A5C;color:#fff;border:none;border-radius:8px;font-size:16px;font-weight:700;cursor:pointer">🖨️ Imprimir / Guardar PDF</button>
+  </div>
+  </body></html>`);
+  win.document.close();
+
+  toast('📄 PDF generado — ' + discs.length + ' láminas');
+}
+
+function epDonutSVG(planos) {
+  var counts = {terminado:0,cambios:0,enproceso:0,sinempezar:0};
+  var colors = {terminado:'#4CAF50',cambios:'#42A5F5',enproceso:'#FFA726',sinempezar:'#EF5350'};
+  var total = planos.length;
+  if(!total) return '';
+  planos.forEach(p=>{ if(counts[p.estatus]!==undefined) counts[p.estatus]++; });
+
+  var cx=100, cy=100, r=75, ir=45;
+  var paths = '';
+  var labels = '';
+  var start = -Math.PI/2;
+
+  Object.entries(counts).forEach(([k,v])=>{
+    if(!v) return;
+    var angle = (v/total)*2*Math.PI;
+    var end = start + angle;
+    var x1=cx+r*Math.cos(start), y1=cy+r*Math.sin(start);
+    var x2=cx+r*Math.cos(end),   y2=cy+r*Math.sin(end);
+    var xi1=cx+ir*Math.cos(start),yi1=cy+ir*Math.sin(start);
+    var xi2=cx+ir*Math.cos(end),  yi2=cy+ir*Math.sin(end);
+    var large = angle>Math.PI?1:0;
+    paths += `<path d="M${xi1},${yi1} L${x1},${y1} A${r},${r} 0 ${large} 1 ${x2},${y2} L${xi2},${yi2} A${ir},${ir} 0 ${large} 0 ${xi1},${yi1}" fill="${colors[k]}"/>`;
+
+    // Label
+    var mid = start + angle/2;
+    var lx = cx + (r+22)*Math.cos(mid);
+    var ly = cy + (r+22)*Math.sin(mid);
+    var pctLbl = Math.round(v/total*100);
+    var nom = planos.filter(p=>p.estatus===k).map(p=>p.nombre.split(' ').slice(0,2).join(' ')).join(', ');
+    labels += `<text x="${lx}" y="${ly}" text-anchor="middle" fill="#4A5568" font-size="7" font-weight="700">${nom.length>20?nom.slice(0,18)+'…':nom}</text>
+    <text x="${lx}" y="${ly+9}" text-anchor="middle" fill="#8A96A8" font-size="7">${pctLbl}%</text>`;
+
+    start = end;
+  });
+
+  return `<svg viewBox="0 0 200 200" width="200" height="200">
+    ${paths}
+    ${labels}
+    <circle cx="${cx}" cy="${cy}" r="${ir}" fill="white"/>
+  </svg>`;
+}
+
+// om() ya maneja el modal — no se necesita helper adicional
+</script>
+<!-- ═══════════════ FIN ENTREGA DE PLANOS ═══════════════ -->
 
 <!-- ═══════════════ COTIZADOR LIBRE ═══════════════ -->
 <script>
