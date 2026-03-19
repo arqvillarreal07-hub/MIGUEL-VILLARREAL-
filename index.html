@@ -4148,14 +4148,13 @@ function rPortal(){
     $('MN').innerHTML='<div class="ph3"><div><div class="pt">Portal del Cliente</div></div></div><div class="card" style="text-align:center;padding:52px;color:var(--g4)">Sin proyectos activos</div>';
     return;
   }
-  var activos=DB.projects.filter(function(p){return p.status==='ACTIVO'||p.status==='COTIZACIÓN';});
-  var pid=window._portalPid||(activos[0]||DB.projects[0]).id;
+  var pid=window._portalPid||(DB.projects[0]||{}).id||'';
   window._portalPid=pid;
 
   $('MN').innerHTML=`
   <div class="ph3">
     <div><div class="pt">🌐 Portal del Cliente</div><div class="ps">Vista del avance y estado de cuenta por proyecto</div></div>
-    <select class="fsel" id="pp_sel" onchange="window._portalPid=this.value;rPortal()">
+    <select class="fsel" id="pp_sel" onchange="portalCambiar(this.value)">
       ${DB.projects.map(function(p){return '<option value="'+p.id+'"'+(p.id===pid?' selected':'')+'>'+p.name+'</option>';}).join('')}
     </select>
   </div>
@@ -4163,9 +4162,21 @@ function rPortal(){
   portalRenderProy(pid);
 }
 
+function portalCambiar(pid){
+  window._portalPid=pid;
+  portalRenderProy(pid);
+}
+
 function portalRenderProy(pid){
   var el=document.getElementById('pp_cnt');if(!el)return;
-  var p=gP(pid);if(!p){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--g4)">Proyecto no encontrado</div>';return;}
+  // gP busca por ID — asegurar que funciona con string e integer
+  var p=DB.projects.find(function(x){return String(x.id)===String(pid);});
+  if(!p){
+    // Si no encontró, tomar el primero disponible
+    p=DB.projects[0];
+    if(p) window._portalPid=p.id;
+    else{el.innerHTML='<div style="padding:40px;text-align:center;color:var(--g4)">Sin proyectos</div>';return;}
+  }
   var c=gC(p.cid);
   var w=DB.works.find(function(x){return x.pid===pid;});
   var cot=DB.quotations.find(function(q){return q.pid===pid&&q.status==='APROBADA';});
