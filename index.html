@@ -441,9 +441,12 @@ const NAV_ITEMS = {
 function actualizarAuthBadge(){
   var badge=document.getElementById('auth_badge');
   if(!badge)return;
-  var pend=(DB.preauth||[]).filter(function(a){return a.status==='pendiente';}).length;
-  badge.textContent=pend;
-  badge.style.display=pend>0?'inline-flex':'none';
+  var movPend=(DB.preauth||[]).filter(function(a){return a.status==='pendiente';}).length;
+  var cotPend=DB.quotations.filter(function(q){return q.status==='BORRADOR'||q.status==='EN NEGOCIACIÓN';}).length;
+  var cotSinObra=DB.quotations.filter(function(q){return q.status==='APROBADA'&&q.pid&&!DB.works.find(function(w){return w.pid===q.pid;});}).length;
+  var total=movPend+cotPend+cotSinObra;
+  badge.textContent=total;
+  badge.style.display=total>0?'inline-flex':'none';
 }
 
 function updateProyBadge(){
@@ -1310,60 +1313,393 @@ function ncFiltrarClientes(q){
 function ncSelCliente(id,name){ document.getElementById('nc_c_txt').value=name; document.getElementById('nc_c_id').value=id; document.getElementById('nc_c_drop').style.display='none'; if(document.getElementById('nc_nuevo_hint')) document.getElementById('nc_nuevo_hint').style.display='none'; }
 function ncSelNuevo(name){ document.getElementById('nc_c_txt').value=name.trim(); document.getElementById('nc_c_id').value='__nuevo__'; document.getElementById('nc_c_drop').style.display='none'; if(document.getElementById('nc_nuevo_hint')){ document.getElementById('nc_nuevo_hint').style.display='block'; document.getElementById('nc_nuevo_hint').textContent='✨ Se creará "'+name.trim()+'" como nuevo cliente'; } }
 
+// ══════════════════════════════════════════════════════════════════
+// DETALLE COTIZACIÓN — Edición de partidas + Flujo de aprobación
+// ══════════════════════════════════════════════════════════════════
+var _cotDIdx = null; // índice actual en openCotD
+
 function openCotD(i){
-  const q=DB.quotations[i]; const c=gC(q.cid); const proj=q.pid?gP(q.pid):null;
-  const TIPO_ICO={'Libre':'📝','Proyecto Arq.':'🏛️','Honorarios':'📐','Construcción':'🏗️','Remodelación':'🔧'};
-  const ico=TIPO_ICO[q.tipo]||'📄';
-  const hasPartidas=q.partidas&&q.partidas.length>0;
-  const sub=hasPartidas?q.partidas.reduce((s,p)=>s+(p.cant*p.pu),0):Math.round(q.total/1.16);
-  om(`${ico} ${q.id}`,`
-    <div style="display:flex;gap:8px;margin-bottom:14px;flex-wrap:wrap">${bd(q.status)}<span class="bdg bgr">${q.tipo||'General'}</span><span class="bdg bgr">V${q.v}</span></div>
-    <div class="fr2" style="margin-bottom:12px">
-      <div><div class="fl">Cliente</div><div style="font-weight:700">${(c&&c.name)}</div></div>
-      <div><div class="fl">Proyecto</div><div style="font-weight:700">${(proj&&proj.name)||'Sin proyecto'}</div></div>
+  _cotDIdx = i;
+  var q = DB.quotations[i];
+  if(!q){ toast('Cotización no encontrada'); return; }
+  cotDRender(i);
+}
+
+function cotDRender(i){
+  var q = DB.quotations[i];
+  var c = gC(q.cid);
+  var proj = q.pid ? gP(q.pid) : null;
+  var obra = q.pid ? DB.works.find(function(w){ return w.pid===q.pid; }) : null;
+  var TIPO_ICO = {'Libre':'📝','Proyecto Arq.':'🏛️','Honorarios':'📐','Construcción':'🏗️','Remodelación':'🔧'};
+  var ico = TIPO_ICO[q.tipo] || '📄';
+
+  // Calcular totales
+  var partidas = q.partidas || [];
+  var sub = partidas.length ? partidas.reduce(function(s,p){ return s+(p.sub||p.cant*p.pu||0); }, 0) : Math.round(q.total/1.16);
+  var iva = q.iva ? sub * 0.16 : 0;
+  var total = sub + iva;
+
+  // Estado visual
+  var statusColor = {
+    'BORRADOR':'var(--g4)', 'EN NEGOCIACIÓN':'var(--amber)',
+    'APROBADA':'var(--green)', 'RECHAZADA':'var(--red)',
+    'EN REVISIÓN':'var(--blue)', 'ENVIADA':'var(--blue)'
+  }[q.status] || 'var(--g4)';
+
+  var yaEnObra = !!obra;
+
+  om(ico+' '+q.id+' — '+q.desc, `
+  <!-- HEADER estado + acciones rápidas -->
+  <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
+    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+      <span style="background:${statusColor}22;color:${statusColor};padding:5px 14px;border-radius:20px;font-size:12px;font-weight:800;border:1.5px solid ${statusColor}">${q.status}</span>
+      <span class="bdg bgr">${ico} ${q.tipo||'General'}</span>
+      <span class="bdg bgr">V${q.v}</span>
     </div>
-    ${hasPartidas?`
-    <div style="font-size:11px;font-weight:700;color:var(--g4);margin-bottom:6px">PARTIDAS</div>
-    <div style="overflow-x:auto;margin-bottom:12px">
-    <table style="width:100%;border-collapse:collapse;font-size:12px">
+    ${q.status !== 'APROBADA' ? `
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <select onchange="cotDCambiarEstado(${i},this.value)" style="padding:6px 12px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-weight:700;color:var(--navy);background:#fff">
+        ${['BORRADOR','EN REVISIÓN','ENVIADA','EN NEGOCIACIÓN'].map(function(s){ return '<option value="'+s+'"'+(s===q.status?' selected':'')+'>'+s+'</option>'; }).join('')}
+      </select>
+      <button onclick="cotDAprobar(${i})" style="background:#2E7D32;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:800;cursor:pointer">✅ Aprobar</button>
+    </div>` : ''}
+  </div>
+
+  <!-- INFO BÁSICA -->
+  <div class="fr2" style="margin-bottom:12px">
+    <div><div class="fl">Cliente</div><div style="font-weight:700;font-size:14px">${(c&&c.name)||'—'}</div></div>
+    <div><div class="fl">Proyecto vinculado</div><div style="font-weight:700;font-size:14px">${proj ? proj.name : '<span style="color:var(--g4)">Sin proyecto</span>'}</div></div>
+  </div>
+
+  <!-- ALERTA: Aprobada y sin obra -->
+  ${q.status==='APROBADA' && !yaEnObra ? `
+  <div style="background:var(--gbg);border:2px solid var(--green);border-radius:10px;padding:14px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
+    <span style="font-size:24px">🚀</span>
+    <div style="flex:1">
+      <div style="font-size:13px;font-weight:800;color:var(--green)">Cotización aprobada — lista para iniciar</div>
+      <div style="font-size:12px;color:var(--g5);margin-top:2px">Crea el proyecto y la obra para comenzar el seguimiento con todas las partidas y Gantt.</div>
+    </div>
+    <button onclick="cotDCrearProyectoYObra(${i})" style="background:var(--green);color:#fff;border:none;border-radius:8px;padding:12px 18px;font-size:13px;font-weight:800;cursor:pointer;white-space:nowrap">🏗️ Crear proyecto + obra</button>
+  </div>` : ''}
+
+  ${yaEnObra ? `
+  <div style="background:var(--navy);border-radius:10px;padding:12px 16px;margin-bottom:12px;display:flex;align-items:center;gap:12px">
+    <span style="font-size:20px">🏗️</span>
+    <div style="flex:1;color:#fff"><div style="font-size:13px;font-weight:700">Ya tiene obra creada: ${obra.id}</div><div style="font-size:11px;opacity:.7">Avance: ${obra.prog}% · Etapa: ${obra.stage}</div></div>
+    <button onclick="cm();window._obraActiva='${obra.id}';window._obraTab='resumen';goTo('obras')" style="background:var(--gold);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer">Ver obra →</button>
+  </div>` : ''}
+
+  <!-- PARTIDAS — editables -->
+  <div style="font-size:11px;font-weight:800;color:var(--g4);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
+    Partidas (${partidas.length}) 
+    ${q.status!=='APROBADA' ? '<button onclick="cotDAgregarPartida('+i+')" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;margin-left:8px">+ Agregar</button>' : ''}
+  </div>
+  ${partidas.length ? `
+  <div style="overflow-x:auto;margin-bottom:12px;border:1px solid var(--g2);border-radius:8px">
+    <table style="width:100%;border-collapse:collapse;font-size:12px;min-width:560px">
       <thead><tr style="background:var(--g1)">
-        <th style="padding:6px 8px;text-align:left">Concepto</th>
-        <th style="padding:6px 8px;text-align:center">Unidad</th>
-        <th style="padding:6px 8px;text-align:right">Cant.</th>
-        <th style="padding:6px 8px;text-align:right">P.U.</th>
-        <th style="padding:6px 8px;text-align:right">Subtotal</th>
+        <th style="padding:8px 10px;text-align:left;font-size:10px;color:var(--g4);font-weight:700">CONCEPTO</th>
+        <th style="padding:8px 8px;text-align:left;font-size:10px;color:var(--g4);font-weight:700;width:70px">CAT.</th>
+        <th style="padding:8px 8px;text-align:center;font-size:10px;color:var(--g4);font-weight:700;width:50px">UNI</th>
+        <th style="padding:8px 8px;text-align:right;font-size:10px;color:var(--g4);font-weight:700;width:55px">CANT.</th>
+        <th style="padding:8px 8px;text-align:right;font-size:10px;color:var(--g4);font-weight:700;width:90px">P.U.</th>
+        <th style="padding:8px 8px;text-align:right;font-size:10px;color:var(--g4);font-weight:700;width:100px">SUBTOTAL</th>
+        ${q.status!=='APROBADA' ? '<th style="padding:8px 6px;width:28px"></th>' : ''}
       </tr></thead>
-      <tbody>${q.partidas.map(p=>`<tr style="border-bottom:1px solid var(--g1)"><td style="padding:5px 8px">${p.concepto||'—'}</td><td style="padding:5px 8px;text-align:center">${p.unidad}</td><td style="padding:5px 8px;text-align:right">${p.cant}</td><td style="padding:5px 8px;text-align:right">${fmt(p.pu)}</td><td style="padding:5px 8px;text-align:right;font-weight:700">${fmt(p.cant*p.pu)}</td></tr>`).join('')}</tbody>
-    </table></div>`:
-    `<div style="background:var(--g1);border-radius:8px;padding:14px;margin-bottom:12px"><div style="font-size:11px;font-weight:700;color:var(--g4);margin-bottom:8px">DESGLOSE</div>
-    ${[['Materiales',sub*.45],['Mano de obra',sub*.30],['Indirectos 12%',sub*.12],['Utilidad '+q.margin+'%',sub*(q.margin/100)]].map(([l,v])=>`<div style="display:flex;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--g2);font-size:12px"><span>${l}</span><span>${fmt(v)}</span></div>`).join('')}</div>`}
-    <div style="background:var(--g1);border-radius:8px;padding:12px;margin-bottom:10px">
-      <div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>Subtotal</span><span style="font-weight:700">${fmt(sub)}</span></div>
-      ${q.iva?`<div style="display:flex;justify-content:space-between;font-size:13px;padding:4px 0"><span>IVA 16%</span><span style="font-weight:700">${fmt(sub*.16)}</span></div>`:''}
-      <div style="display:flex;justify-content:space-between;padding:8px 0;border-top:2px solid var(--navy);margin-top:6px">
-        <span style="font-size:15px;font-weight:800;color:var(--navy)">TOTAL</span>
-        <span style="font-size:17px;font-weight:800;color:var(--navy)">${fmt(q.total)}</span>
-      </div>
+      <tbody>
+        ${partidas.map(function(p,pi){ 
+          var sub_p = p.sub || (p.cant*(p.pu||0));
+          return '<tr style="border-top:1px solid var(--g1)">'
+            +'<td style="padding:7px 10px;font-size:12px;color:var(--g5)">'
+              +(q.status!=='APROBADA'
+                ? '<input value="'+(p.nom||p.concepto||'').replace(/"/g,"'")+'" onblur="cotDEditPartida('+i+','+pi+',\'nom\',this.value)" style="width:100%;border:none;background:transparent;font-size:12px;font-weight:600;color:var(--navy);outline:none;min-width:150px">'
+                : '<span style="font-weight:600;color:var(--navy)">'+(p.nom||p.concepto||'—')+'</span>')
+            +'</td>'
+            +'<td style="padding:7px 8px;font-size:11px;color:var(--g4)">'+(p.cat||'—')+'</td>'
+            +'<td style="padding:7px 8px;text-align:center;font-size:11px">'+(p.uni||p.unidad||'—')+'</td>'
+            +'<td style="padding:7px 8px;text-align:right">'
+              +(q.status!=='APROBADA'
+                ? '<input type="number" value="'+(p.cant||1)+'" onblur="cotDEditPartida('+i+','+pi+',\'cant\',this.value)" style="width:48px;border:1px solid var(--g2);border-radius:4px;padding:3px 5px;font-size:11px;text-align:right">'
+                : (p.cant||1))
+            +'</td>'
+            +'<td style="padding:7px 8px;text-align:right">'
+              +(q.status!=='APROBADA'
+                ? '<input type="number" value="'+(p.pu||0)+'" onblur="cotDEditPartida('+i+','+pi+',\'pu\',this.value)" style="width:80px;border:1px solid var(--g2);border-radius:4px;padding:3px 5px;font-size:11px;text-align:right">'
+                : fmt(p.pu||0))
+            +'</td>'
+            +'<td style="padding:7px 8px;text-align:right;font-weight:700;color:var(--navy)">'+fmt(sub_p)+'</td>'
+            +(q.status!=='APROBADA' ? '<td style="padding:7px 4px;text-align:center"><button onclick="cotDElimPartida('+i+','+pi+')" style="background:none;border:none;cursor:pointer;color:var(--g3);font-size:14px;line-height:1">✕</button></td>' : '')
+          +'</tr>';
+        }).join('')}
+      </tbody>
+    </table>
+  </div>` : `
+  <div style="background:var(--g1);border-radius:8px;padding:20px;text-align:center;color:var(--g4);margin-bottom:12px">
+    Sin partidas. ${q.status!=='APROBADA'?'<button onclick="cotDAgregarPartida('+i+')" class="btn bp bsm" style="margin-left:8px">+ Agregar partida</button>':''}
+  </div>`}
+
+  <!-- TOTALES -->
+  <div style="background:var(--navy);border-radius:10px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
+    <div style="color:rgba(255,255,255,.7);font-size:12px">
+      Subtotal ${fmt(sub)} ${q.iva?'+ IVA 16% ('+fmt(iva)+')':'(sin IVA)'}
     </div>
-    ${q.status!=='APROBADA'?`<div class="fg"><div class="fl">Estado</div>
-      <select class="fsl" onchange="DB.quotations[${i}].status=this.value">
-        ${['BORRADOR','EN REVISIÓN','ENVIADA','EN NEGOCIACIÓN','APROBADA','RECHAZADA'].map(s=>`<option ${s===q.status?'selected':''}>${s}</option>`).join('')}
-      </select></div>`:''}`,
-    `<button class="btn bo" onclick="cm()">Cerrar</button>
-     <button class="btn bo" onclick="cm();rNuevaCot(${i})">✏️ Editar</button>
-     <button class="btn bo" onclick="pdfCot(${i})">📥 PDF</button>
-     ${q.status!=='APROBADA'?`<button class="btn bg" onclick="DB.quotations[${i}].status='APROBADA';cm();rCots();toast('✅ Cotización aprobada')">Aprobar</button>`:`<button class="btn bp" onclick="cm();cotCrearProyecto(${i})">📋 Crear Proyecto</button>`}`
+    <div style="font-size:22px;font-weight:900;color:var(--gold)">TOTAL ${fmt(total)}</div>
+  </div>
+  ${q.condPago ? `<div style="font-size:12px;color:var(--g4);margin-top:8px;padding:0 2px">💳 <strong>Pago:</strong> ${q.condPago}</div>` : ''}
+  `,
+
+  // FOOTER
+  `<button class="btn bo" onclick="cm()">← Cerrar</button>
+   <button class="btn bo" onclick="pdfCot(${i})">📥 PDF</button>
+   ${q.status!=='APROBADA' ? `
+   <button class="btn bp" onclick="cotDGuardar(${i})">💾 Guardar cambios</button>
+   <button class="btn bg" onclick="cotDAprobar(${i})" style="font-size:14px;padding:10px 20px">✅ Aprobar cotización</button>
+   ` : `
+   <button class="btn bp" onclick="cm();cotDCrearProyectoYObra(${i})">🏗️ Crear proyecto + obra</button>
+   `}`
   );
 }
 
-function cotCrearProyecto(i){
-  var q=DB.quotations[i]; var c=gC(q.cid);
-  var pid=DB.projects.length?Math.max(...DB.projects.map(p=>p.id))+1:1;
-  DB.projects.push({id:pid,name:q.desc||q.id,cid:q.cid,uid:1,type:q.tipo||'General',status:'ACTIVO',prog:0,stage:'Inicio',sem:'green',cot:q.total,cont:q.total,cob:0,gast:0,date:today()});
-  DB.quotations[i].pid=pid;
-  toast('✅ Proyecto creado desde cotización');
-  goTo('planproyecto');
+// ── Edición inline de partidas ────────────────────────────────────────────────
+function cotDEditPartida(i, pi, campo, val){
+  var q = DB.quotations[i]; if(!q||!q.partidas) return;
+  var p = q.partidas[pi]; if(!p) return;
+  if(campo==='nom') p.nom = val;
+  else if(campo==='cant'){ p.cant = parseFloat(val)||1; p.sub = p.cant*(p.pu||0); }
+  else if(campo==='pu')  { p.pu   = parseFloat(val)||0; p.sub = (p.cant||1)*p.pu; }
+  // Recalcular total
+  var sub = q.partidas.reduce(function(s,p){ return s+(p.sub||p.cant*p.pu||0); }, 0);
+  q.total = Math.round(sub * (q.iva ? 1.16 : 1));
 }
+
+function cotDElimPartida(i, pi){
+  var q = DB.quotations[i]; if(!q||!q.partidas) return;
+  if(!confirm('¿Eliminar esta partida?')) return;
+  q.partidas.splice(pi, 1);
+  var sub = q.partidas.reduce(function(s,p){ return s+(p.sub||p.cant*p.pu||0); }, 0);
+  q.total = Math.round(sub * (q.iva ? 1.16 : 1));
+  cotDRender(i);
+}
+
+function cotDAgregarPartida(i){
+  var q = DB.quotations[i]; if(!q) return;
+  om('➕ Agregar partida', `
+    <div style="display:flex;flex-direction:column;gap:10px">
+      <div><div class="fl">Concepto / Descripción *</div><input id="cdp_nom" class="fi" placeholder="ej. Excavación manual, Firme de concreto..."></div>
+      <div class="fr2">
+        <div><div class="fl">Categoría</div>
+          <input id="cdp_cat" class="fi" list="cdp_cat_list" placeholder="Obra Civil, Herrería...">
+          <datalist id="cdp_cat_list">
+            <option>Obra Civil</option><option>Cimentación</option><option>Estructura</option>
+            <option>Instalaciones</option><option>Herrería</option><option>Acabados</option>
+            <option>Diseño</option><option>Trámites</option><option>Supervisión</option>
+          </datalist>
+        </div>
+        <div><div class="fl">Unidad</div>
+          <input id="cdp_uni" class="fi" list="cdp_uni_list" placeholder="m2, lote, pza...">
+          <datalist id="cdp_uni_list">
+            <option>m2</option><option>m3</option><option>ml</option><option>lote</option>
+            <option>pza</option><option>kg</option><option>ton</option><option>visitas</option>
+          </datalist>
+        </div>
+      </div>
+      <div class="fr2">
+        <div><div class="fl">Cantidad</div><input id="cdp_cant" class="fi" type="number" value="1" min="0"></div>
+        <div><div class="fl">Precio Unitario ($)</div><input id="cdp_pu" class="fi" type="number" value="0" min="0"></div>
+      </div>
+    </div>`,
+    `<button class="btn" onclick="cm()" style="background:var(--g2);color:var(--g5)">Cancelar</button>
+     <button class="btn bp" onclick="cotDGuardarPartida(${i})">Agregar partida</button>`
+  );
+  setTimeout(function(){ var e=document.getElementById('cdp_nom'); if(e)e.focus(); }, 100);
+}
+
+function cotDGuardarPartida(i){
+  var q = DB.quotations[i]; if(!q) return;
+  var nom = (document.getElementById('cdp_nom')||{}).value.trim();
+  if(!nom){ toast('⚠️ Ingresa el concepto'); return; }
+  var cat = (document.getElementById('cdp_cat')||{}).value.trim() || 'General';
+  var uni = (document.getElementById('cdp_uni')||{}).value.trim() || 'lote';
+  var cant = parseFloat((document.getElementById('cdp_cant')||{}).value) || 1;
+  var pu   = parseFloat((document.getElementById('cdp_pu')||{}).value) || 0;
+  var sub  = Math.round(cant * pu);
+  if(!q.partidas) q.partidas = [];
+  q.partidas.push({ nom:nom, cat:cat, uni:uni, cant:cant, pu:pu, sub:sub });
+  var totalSub = q.partidas.reduce(function(s,p){ return s+(p.sub||0); }, 0);
+  q.total = Math.round(totalSub * (q.iva ? 1.16 : 1));
+  cm();
+  cotDRender(i);
+  toast('✅ Partida agregada');
+}
+
+function cotDGuardar(i){
+  // Recalcular totales antes de guardar
+  var q = DB.quotations[i]; if(!q) return;
+  if(q.partidas&&q.partidas.length){
+    var sub = q.partidas.reduce(function(s,p){ return s+(p.sub||p.cant*p.pu||0); }, 0);
+    q.total = Math.round(sub * (q.iva ? 1.16 : 1));
+    q.v = (q.v||1);
+  }
+  saveToStorage();
+  toast('✅ Cotización guardada');
+}
+
+function cotDCambiarEstado(i, val){
+  if(val==='APROBADA'){
+    cotDAprobar(i);  // Flujo completo: aprobar → crear proyecto+obra+gantt
+    return;
+  }
+  DB.quotations[i].status = val;
+  cotDRender(i);   // Re-render para reflejar cambio
+  saveToStorage();
+  actualizarAuthBadge();
+}
+
+// ── APROBAR → crea Proyecto + Obra + Gantt automáticamente ───────────────────
+function cotDAprobar(i){
+  var q = DB.quotations[i]; if(!q) return;
+  if(!q.partidas||!q.partidas.length){
+    if(!confirm('Esta cotización no tiene partidas. ¿Aprobar de todas formas?')) return;
+  }
+  if(!confirm('¿Aprobar la cotización '+q.id+' por '+fmt(q.total)+'?\n\nSe creará automáticamente el proyecto y la obra con todas las partidas y el diagrama de Gantt.')) return;
+
+  q.status = 'APROBADA';
+
+  // Guardar recalculando
+  if(q.partidas&&q.partidas.length){
+    var sub = q.partidas.reduce(function(s,p){ return s+(p.sub||p.cant*p.pu||0); }, 0);
+    q.total = Math.round(sub * (q.iva ? 1.16 : 1));
+  }
+
+  cm();
+  cotDCrearProyectoYObra(i);
+}
+
+function cotDCrearProyectoYObra(i){
+  var q = DB.quotations[i]; if(!q){ toast('⚠️ Cotización no encontrada'); return; }
+
+  // ─ 1. Crear o actualizar proyecto ─────────────────────────────────────────
+  var pid = q.pid;
+  if(!pid){
+    // Generar ID automático
+    var c = DB.clients.find(function(x){ return x.id===q.cid; });
+    var initials = (c&&c.name ? c.name.replace(/[^A-Za-z]/g,'').slice(0,4).toUpperCase() : 'PROY');
+    pid = initials+'-'+new Date().getFullYear().toString().slice(2)+'-'+String(DB.projects.length+1).padStart(2,'0');
+    DB.projects.push({
+      id:pid, name: q.desc||q.id,
+      cid:q.cid, uid:DB.user?DB.user.id:1,
+      type:q.tipo||'Construcción', status:'ACTIVO',
+      prog:0, stage:'Inicio', sem:'green',
+      cot:q.total, cont:q.total, cob:0, gast:0,
+      desc:q.desc||'',
+    });
+    q.pid = pid;
+  } else {
+    var p = gP(pid);
+    if(p){ p.status='ACTIVO'; p.cont=q.total; p.cot=q.total; }
+  }
+
+  // ─ 2. Verificar si ya existe obra ─────────────────────────────────────────
+  if(DB.works.find(function(w){ return w.pid===pid; })){
+    toast('ℹ️ Ya existe una obra para este proyecto');
+    window._obraActiva = DB.works.find(function(w){ return w.pid===pid; }).id;
+    window._obraTab = 'resumen';
+    goTo('obras');
+    return;
+  }
+
+  // ─ 3. Convertir partidas a partidas de obra ───────────────────────────────
+  var partidas = [];
+  var grupos = {};
+  (q.partidas||[]).forEach(function(pt){
+    var rub = (pt.cat||'GENERAL').toUpperCase();
+    if(!grupos[rub]) grupos[rub] = [];
+    grupos[rub].push(pt);
+  });
+  Object.keys(grupos).forEach(function(rub){
+    grupos[rub].forEach(function(pt){
+      partidas.push({
+        rub: rub,
+        nom: pt.nom||pt.concepto||'—',
+        pres: pt.sub || Math.round((pt.cant||1)*(pt.pu||0)),
+        gast: 0,
+        p: 0
+      });
+    });
+  });
+  var budget = partidas.reduce(function(s,p){ return s+p.pres; }, 0) || q.total;
+
+  // ─ 4. Generar etapas desde categorías ─────────────────────────────────────
+  var cats = [];
+  Object.keys(grupos).forEach(function(rub){ if(!cats.includes(rub)) cats.push(rub); });
+  var stages = cats.map(function(c){ return { n:c.charAt(0)+c.slice(1).toLowerCase(), p:0 }; });
+  if(!stages.length) stages = [{n:'Inicio',p:0},{n:'Desarrollo',p:0},{n:'Entrega',p:0}];
+
+  var wid = 'OBR-'+pid.slice(0,6)+'-'+String(Date.now()).slice(-4);
+  var obra = {
+    id:wid, pid:pid,
+    name: gP(pid) ? gP(pid).name : (q.desc||q.id),
+    uid: DB.user ? DB.user.id : 1,
+    addr: '', prog:0, sem:'green',
+    budget:budget, spent:0,
+    stage: stages[0].n, log:'—',
+    stages:stages, partidas:partidas
+  };
+  DB.works.push(obra);
+
+  // ─ 5. Generar Gantt automático desde partidas/categorías ──────────────────
+  if(!DB.gantt) DB.gantt={};
+  var ganttTareas = [];
+  var cursor = new Date();
+  // Duraciones estimadas por categoría (días)
+  var durMap = {
+    'DISEÑO':14,'TRÁMITES':21,'PERMISOS':21,'CIMENTACIÓN':21,'OBRA CIVIL':45,
+    'ESTRUCTURA':30,'INSTALACIONES':30,'HERRERÍA':21,'ACABADOS':30,'SUPERVISIÓN':60,
+    'ENTREGA':7,'GENERAL':14
+  };
+  var colores = ['#1B3A5C','#1565C0','#2E7D32','#E65100','#7C3AED','#C62828','#C9A84C','#00838F','#4A5568','#C62828'];
+
+  cats.forEach(function(cat, idx){
+    var partsGrupo = grupos[cat];
+    var dur = durMap[cat] || 14;
+    var ini = new Date(cursor);
+    var fin = new Date(cursor);
+    fin.setDate(fin.getDate() + dur);
+
+    // Si el grupo tiene solo 1 partida, usar su nombre; si tiene varias, usar la categoría
+    var nombre = partsGrupo.length === 1
+      ? (partsGrupo[0].nom||partsGrupo[0].concepto||cat).slice(0,50)
+      : cat.charAt(0)+cat.slice(1).toLowerCase()+' ('+partsGrupo.length+' partidas)';
+
+    ganttTareas.push({
+      id: 'GT-'+Date.now()+'-'+idx,
+      nom: nombre,
+      cat: cat,
+      inicio: ini.toISOString().split('T')[0],
+      fin:    fin.toISOString().split('T')[0],
+      avance: 0,
+      est: 'sin_iniciar',
+      uid: null,
+      color: colores[idx % colores.length]
+    });
+
+    // Siguiente bloque empieza al 70% (solapamiento natural)
+    cursor.setDate(cursor.getDate() + Math.round(dur * 0.7));
+  });
+
+  DB.gantt[wid] = ganttTareas;
+
+  saveToStorage();
+  actualizarAuthBadge();
+
+  toast('🏗️ Proyecto "'+gP(pid).name+'" + Obra '+wid+' creados con '+partidas.length+' partidas y '+ganttTareas.length+' tareas en Gantt');
+
+  // Navegar a la obra
+  window._obraActiva = wid;
+  window._obraTab = 'gantt'; // Mostrar el Gantt primero — es lo más impactante
+  goTo('obras');
+}
+
 
 function pdfCot(i){
   const q=DB.quotations[i]; const c=gC(q.cid); const proj=q.pid?gP(q.pid):null;
@@ -1376,7 +1712,7 @@ function pdfCot(i){
   <table>
     <thead><tr><th>Concepto</th><th style="text-align:center">Unidad</th><th style="text-align:right">Cant.</th><th style="text-align:right">P.U.</th><th style="text-align:right">Subtotal</th></tr></thead>
     <tbody>
-    ${q.partidas.map(p=>`<tr><td>${p.concepto||'—'}</td><td style="text-align:center">${p.unidad}</td><td style="text-align:right">${p.cant}</td><td style="text-align:right">$${p.pu.toLocaleString('es-MX')}</td><td style="text-align:right">$${(p.cant*p.pu).toLocaleString('es-MX')}</td></tr>`).join('')}
+    ${q.partidas.map(p=>`<tr><td>${p.nom||p.concepto||'—'}</td><td style="text-align:center">${p.uni||p.unidad||'—'}</td><td style="text-align:right">${p.cant||1}</td><td style="text-align:right">$${(p.pu||0).toLocaleString('es-MX')}</td><td style="text-align:right">$${(p.sub||(p.cant||1)*(p.pu||0)).toLocaleString('es-MX')}</td></tr>`).join('')}
     ${q.iva?`<tr><td colspan="4" style="text-align:right">IVA 16%</td><td style="text-align:right">$${Math.round(sub*.16).toLocaleString('es-MX')}</td></tr>`:''}
     <tr class="tot"><td colspan="4">TOTAL</td><td style="text-align:right;color:#1B3A5C">$${q.total.toLocaleString('es-MX')}</td></tr>
     </tbody>
@@ -1469,6 +1805,8 @@ function rObras(){
     var act = t===tabActivo;
     return '<button onclick="obraTab(\''+t+'\')" style="padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;background:'+(act?'var(--navy)':'transparent')+';color:'+(act?'#fff':'var(--g4)')+'">'+labels[t]+'</button>';
   }).join('');
+  // Botón regresar visible en tabs distintos a resumen
+  var btnRegresar = tabActivo!=='resumen' ? '<button onclick="obraTab(\'resumen\')" style="padding:8px 14px;border:1px solid var(--g2);border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;background:#fff;color:var(--g5);white-space:nowrap">← Resumen</button>' : '';
 
   $('MN').innerHTML=`
   <div class="ph3">
@@ -1493,7 +1831,8 @@ function rObras(){
   </div>
 
   <!-- Tabs de la obra -->
-  <div style="background:#fff;border:1px solid var(--g2);border-radius:12px;padding:6px;display:flex;gap:4px;margin-top:0;overflow-x:auto">
+  <div style="background:#fff;border:1px solid var(--g2);border-radius:12px;padding:6px;display:flex;gap:4px;margin-top:0;overflow-x:auto;align-items:center">
+    ${btnRegresar}
     ${tabsHtml}
   </div>
 
@@ -3227,74 +3566,293 @@ function semanaLabel(wk){
 }
 
 function rAutorizaciones(){
-  var pend=DB.preauth.filter(a=>a.status==='pendiente');
-  var hist=DB.preauth.filter(a=>a.status!=='pendiente').slice().reverse().slice(0,20);
+  var tab = window._authTab || 'proyectos';
+
+  // Cotizaciones pendientes de aprobación
+  var cotPend = DB.quotations.filter(function(q){
+    return q.status === 'BORRADOR' || q.status === 'EN NEGOCIACIÓN';
+  });
+  // Cotizaciones aprobadas sin obra creada todavía
+  var cotAprobSinObra = DB.quotations.filter(function(q){
+    return q.status === 'APROBADA' && q.pid && !DB.works.find(function(w){return w.pid===q.pid;});
+  });
+  // Movimientos financieros pendientes
+  var movPend = DB.preauth.filter(function(a){return a.status==='pendiente';});
+  var movHist = DB.preauth.filter(function(a){return a.status!=='pendiente';}).slice().reverse().slice(0,15);
+
+  var totalPend = cotPend.length + cotAprobSinObra.length + movPend.length;
 
   $('MN').innerHTML=`
   <div class="ph3">
-    <div><div class="pt">🔐 Autorizaciones</div>
-    <div class="ps">${pend.length} movimiento${pend.length!==1?'s':''} pendiente${pend.length!==1?'s':''} de revisión</div></div>
+    <div>
+      <div class="pt">🔐 Autorizaciones</div>
+      <div class="ps">${totalPend} pendiente${totalPend!==1?'s':''} de acción</div>
+    </div>
   </div>
 
-  ${pend.length===0?`
-    <div class="card" style="text-align:center;padding:48px 24px;color:var(--g4)">
-      <div style="font-size:36px;margin-bottom:10px">✅</div>
-      <div style="font-weight:700">Todo al corriente</div>
-      <div style="font-size:13px;margin-top:4px">No hay movimientos pendientes de autorizar</div>
-    </div>`:
+  <!-- TABS -->
+  <div style="background:#fff;border:1px solid var(--g2);border-radius:12px;padding:5px;display:flex;gap:4px;margin-bottom:0">
+    ${[
+      ['proyectos','📋 Proyectos','Aprobación de cotizaciones y creación de obra', cotPend.length + cotAprobSinObra.length],
+      ['movimientos','💰 Movimientos','Ingresos y egresos pendientes', movPend.length],
+    ].map(function([t,l,d,n]){var act=t===tab;return `
+      <button onclick="authTab('${t}')" style="flex:1;padding:9px 12px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;background:${act?'var(--navy)':'transparent'};color:${act?'#fff':'var(--g4)'};text-align:left">
+        ${l} ${n>0?'<span style="background:var(--gold);color:#fff;padding:1px 7px;border-radius:10px;font-size:11px;margin-left:6px">'+n+'</span>':''}
+      </button>`}).join('')}
+  </div>
 
-  `<div class="card" style="padding:0;overflow:hidden">
-    <div style="padding:12px 16px;background:var(--abg);border-bottom:1px solid var(--g2);font-size:12px;font-weight:700;color:var(--amber)">⏳ PENDIENTES DE AUTORIZACIÓN</div>
-    ${pend.map(a=>{
-      var u=gU(a.uid); var p=a.pid?gP(a.pid):null;
-      return`<div style="padding:14px 16px;border-bottom:1px solid var(--g2)">
-        <div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">
-          <div style="flex:1;min-width:200px">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">
-              <span style="padding:3px 8px;border-radius:99px;font-size:11px;font-weight:700;background:${a.tipo==='ingreso'?'var(--gbg)':'var(--rbg)'};color:${a.tipo==='ingreso'?'var(--green)':'var(--red)'}">${a.tipo==='ingreso'?'↑ Ingreso':'↓ Egreso'}</span>
-              <span style="font-size:15px;font-weight:800;color:var(--navy)">${fmt(a.monto)}</span>
-            </div>
-            <div style="font-size:13px;color:var(--g5);margin-bottom:3px">${a.concepto}</div>
-            <div style="font-size:11px;color:var(--g4)">
-              👤 ${u?u.name:'—'} · 📅 ${a.fecha}${p?' · 📋 '+p.name:''}
-            </div>
-          </div>
-          <div style="display:flex;gap:6px;flex-shrink:0">
-            <button class="btn bsm" style="background:var(--gbg);color:var(--green);border:1.5px solid var(--green)" onclick="authMovimiento(${a.id},'aprobado')">✅ Aprobar</button>
-            <button class="btn bsm" style="background:var(--rbg);color:var(--red);border:1.5px solid var(--red)" onclick="authMovimiento(${a.id},'rechazado')">✕ Rechazar</button>
-          </div>
-        </div>
-      </div>`;
-    }).join('')}
-  </div>`}
+  <div id="auth_content"></div>`;
 
-  ${hist.length?`
-  <div class="card" style="padding:0;overflow:hidden">
-    <div style="padding:12px 16px;background:var(--g1);border-bottom:1px solid var(--g2);font-size:12px;font-weight:700;color:var(--g4)">HISTORIAL RECIENTE</div>
-    ${hist.map(a=>{
-      var u=gU(a.uid); var p=a.pid?gP(a.pid):null;
-      var ok=a.status==='aprobado';
-      return`<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--g2)">
-        <span style="font-size:16px">${ok?'✅':'✕'}</span>
-        <div style="flex:1">
-          <div style="font-size:12px;font-weight:600;color:var(--g5)">${a.concepto}</div>
-          <div style="font-size:11px;color:var(--g4)">${u?u.name:''} · ${a.fecha}${p?' · '+p.name:''}</div>
-        </div>
-        <span style="font-size:13px;font-weight:800;color:${a.tipo==='ingreso'?'var(--green)':'var(--red)'}">${a.tipo==='ingreso'?'+':'-'}${fmt(a.monto)}</span>
-        <span style="font-size:11px;font-weight:700;color:${ok?'var(--green)':'var(--red)'}">${a.status}</span>
-      </div>`;
-    }).join('')}
-  </div>`:''}
-  `;
+  authRenderTab(tab);
+}
+
+function authTab(tab){ window._authTab=tab; rAutorizaciones(); }
+
+function authRenderTab(tab){
+  var el=document.getElementById('auth_content'); if(!el)return;
+  if(tab==='proyectos') el.innerHTML=authHtmlProyectos();
+  else el.innerHTML=authHtmlMovimientos();
+}
+
+// ── TAB: PROYECTOS ────────────────────────────────────────────────────────────
+function authHtmlProyectos(){
+  var cotPend = DB.quotations.filter(function(q){return q.status==='BORRADOR'||q.status==='EN NEGOCIACIÓN';});
+  var cotAprobSinObra = DB.quotations.filter(function(q){
+    return q.status==='APROBADA' && q.pid && !DB.works.find(function(w){return w.pid===q.pid;});
+  });
+  var cotAprobConObra = DB.quotations.filter(function(q){
+    return q.status==='APROBADA' && q.pid && DB.works.find(function(w){return w.pid===q.pid;});
+  });
+
+  var html = '';
+
+  // ─── Pendientes de aprobar ─────────────────────────────────────────────────
+  if(cotPend.length){
+    html += '<div class="card" style="padding:0;overflow:hidden;border:2px solid var(--amber)">'
+      +'<div style="padding:11px 16px;background:var(--abg);border-bottom:1px solid var(--amber);font-size:12px;font-weight:800;color:var(--amber)">⏳ COTIZACIONES PENDIENTES DE APROBACIÓN ('+cotPend.length+')</div>';
+    html += cotPend.map(function(q){
+      var c=DB.clients.find(function(x){return x.id===q.cid;});
+      var p=DB.projects.find(function(x){return x.id===q.pid;});
+      return '<div style="padding:14px 16px;border-bottom:1px solid var(--g1)">'
+        +'<div style="display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap">'
+          +'<div style="flex:1;min-width:200px">'
+            +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px;flex-wrap:wrap">'
+              +'<span style="font-size:15px;font-weight:800;color:var(--navy)">'+q.id+'</span>'
+              +'<span class="bdg bam">'+q.status+'</span>'
+              +'<span class="bdg bgr">V'+q.v+'</span>'
+            +'</div>'
+            +'<div style="font-size:13px;font-weight:600;color:var(--g5);margin-bottom:2px">'+(p?p.name:c?c.name:'—')+'</div>'
+            +'<div style="font-size:12px;color:var(--g4)">'+q.desc+'</div>'
+            +'<div style="margin-top:6px;font-size:14px;font-weight:800;color:var(--navy)">'+fmt(q.total)+'</div>'
+            +'<div style="font-size:11px;color:var(--g4);margin-top:2px">'+q.condPago+'</div>'
+          +'</div>'
+          +'<div style="display:flex;flex-direction:column;gap:6px;min-width:140px">'
+            +'<button class="btn bsm" style="background:var(--gbg);color:var(--green);border:1.5px solid var(--green);padding:10px 14px;font-size:13px" onclick="window._authActCot=\''+q.id+'\';authAprobarCot(window._authActCot)">✅ Aprobar cotización</button>'
+            +'<button class="btn bsm" style="background:var(--rbg);color:var(--red);border:1.5px solid var(--red)" onclick="window._authActCot=\''+q.id+'\';authRechazarCot(window._authActCot)">✕ Rechazar</button>'
+            +'<button class="btn bo bsm" onclick="goTo(\"cotizaciones\")">Ver cotizaciones →</button>'
+          +'</div>'
+        +'</div>'
+      +'</div>';}).join('');
+    html += '</div>';
+  }
+
+  // ─── Aprobadas — listas para crear obra ────────────────────────────────────
+  if(cotAprobSinObra.length){
+    html += '<div class="card" style="padding:0;overflow:hidden;border:2px solid var(--green)">'
+      +'<div style="padding:11px 16px;background:var(--gbg);border-bottom:1px solid var(--green);font-size:12px;font-weight:800;color:var(--green)">🚀 COTIZACIONES APROBADAS — LISTAS PARA CREAR OBRA ('+cotAprobSinObra.length+')</div>';
+    html += cotAprobSinObra.map(function(q){
+      var c=DB.clients.find(function(x){return x.id===q.cid;});
+      var p=DB.projects.find(function(x){return x.id===q.pid;});
+      return '<div style="padding:14px 16px;border-bottom:1px solid var(--g1)">'
+        +'<div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">'
+          +'<div style="flex:1;min-width:200px">'
+            +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
+              +'<span style="font-size:15px;font-weight:800;color:var(--navy)">'+q.id+'</span>'
+              +'<span class="bdg bgrn">APROBADA</span>'
+            +'</div>'
+            +'<div style="font-size:13px;font-weight:700;color:var(--navy)">'+(p?p.name:'—')+'</div>'
+            +'<div style="font-size:12px;color:var(--g4)">'+(c?c.name:'—')+' · '+q.desc+'</div>'
+            +'<div style="margin-top:4px">'
+              +'<span style="font-size:14px;font-weight:800;color:var(--green)">'+fmt(q.total)+'</span>'
+              +'<span style="font-size:11px;color:var(--g4);margin-left:8px">'+(q.partidas?q.partidas.length+' partidas':'')+'</span>'
+            +'</div>'
+          +'</div>'
+          +'<button class="btn bsm" style="background:var(--navy);color:#fff;border:none;padding:12px 18px;font-size:13px;font-weight:800" onclick="window._authActCot=\''+q.id+'\';authCrearObra(window._authActCot)">🏗️ Crear obra con estas partidas</button>'
+        +'</div>'
+      +'</div>';}).join('');
+    html += '</div>';
+  }
+
+  // ─── Ya en obra ─────────────────────────────────────────────────────────────
+  if(cotAprobConObra.length){
+    html += '<div class="card" style="padding:0;overflow:hidden">'
+      +'<div style="padding:11px 16px;background:var(--g1);border-bottom:1px solid var(--g2);font-size:12px;font-weight:700;color:var(--g4)">✅ EN EJECUCIÓN — YA TIENEN OBRA CREADA ('+cotAprobConObra.length+')</div>';
+    html += cotAprobConObra.map(function(q){
+      var p=DB.projects.find(function(x){return x.id===q.pid;});
+      var w=DB.works.find(function(x){return x.pid===q.pid;});
+      return '<div style="display:flex;align-items:center;gap:12px;padding:12px 16px;border-bottom:1px solid var(--g1)">'
+        +'<span style="font-size:18px">🏗️</span>'
+        +'<div style="flex:1">'
+          +'<div style="font-size:13px;font-weight:700;color:var(--navy)">'+(p?p.name:'—')+'</div>'
+          +'<div style="font-size:11px;color:var(--g4)">'+q.id+' · '+(w?'Obra: '+w.id:'')+'</div>'
+        +'</div>'
+        +'<span style="font-size:13px;font-weight:800;color:var(--green)">'+fmt(q.total)+'</span>'
+        +'<button class="btn bo bsm" onclick="goTo(\"obras\")">Ver obra →</button>'
+      +'</div>';}).join('');
+    html += '</div>';
+  }
+
+  if(!cotPend.length && !cotAprobSinObra.length && !cotAprobConObra.length){
+    html = '<div class="card" style="text-align:center;padding:52px 24px;color:var(--g4)">'
+      +'<div style="font-size:44px;margin-bottom:12px">📋</div>'
+      +'<div style="font-size:15px;font-weight:700;color:var(--g5);margin-bottom:6px">Sin cotizaciones registradas</div>'
+      +'<div style="font-size:13px;margin-bottom:20px">Crea cotizaciones en el módulo Cotizaciones para verlas aquí</div>'
+      +'<button class="btn bp" onclick="goTo(\"cotizaciones\")">Ir a Cotizaciones →</button>'
+    +'</div>';
+  }
+  return html;
+}
+
+// ── TAB: MOVIMIENTOS FINANCIEROS ──────────────────────────────────────────────
+function authHtmlMovimientos(){
+  var pend=DB.preauth.filter(function(a){return a.status==='pendiente';});
+  var hist=DB.preauth.filter(function(a){return a.status!=='pendiente';}).slice().reverse().slice(0,15);
+
+  var html='';
+  if(!pend.length){
+    html='<div class="card" style="text-align:center;padding:40px;color:var(--g4)"><div style="font-size:36px;margin-bottom:10px">✅</div><div style="font-weight:700">Sin movimientos pendientes</div></div>';
+  } else {
+    html='<div class="card" style="padding:0;overflow:hidden;border:2px solid var(--amber)">'
+      +'<div style="padding:11px 16px;background:var(--abg);border-bottom:1px solid var(--amber);font-size:12px;font-weight:800;color:var(--amber)">⏳ MOVIMIENTOS PENDIENTES ('+pend.length+')</div>'
+      +pend.map(function(a){
+        var u=gU(a.uid); var p=a.pid?gP(a.pid):null;
+        return '<div style="padding:14px 16px;border-bottom:1px solid var(--g2)">'
+          +'<div style="display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap">'
+            +'<div style="flex:1;min-width:200px">'
+              +'<div style="display:flex;align-items:center;gap:8px;margin-bottom:4px">'
+                +'<span style="padding:3px 8px;border-radius:99px;font-size:11px;font-weight:700;background:'+(a.tipo==='ingreso'?'var(--gbg)':'var(--rbg)')+';color:'+(a.tipo==='ingreso'?'var(--green)':'var(--red)')+'">'+( a.tipo==='ingreso'?'↑ Ingreso':'↓ Egreso')+'</span>'
+                +'<span style="font-size:15px;font-weight:800;color:var(--navy)">'+fmt(a.monto)+'</span>'
+              +'</div>'
+              +'<div style="font-size:13px;color:var(--g5);margin-bottom:3px">'+a.concepto+'</div>'
+              +'<div style="font-size:11px;color:var(--g4)">👤 '+(u?u.name:'—')+' · 📅 '+a.fecha+(p?' · 📋 '+p.name:'')+'</div>'
+            +'</div>'
+            +'<div style="display:flex;gap:6px;flex-shrink:0">'
+              +'<button class="btn bsm" style="background:var(--gbg);color:var(--green);border:1.5px solid var(--green)" onclick="authMovimiento('+a.id+',\'aprobado\')">✅ Aprobar</button>'
+              +'<button class="btn bsm" style="background:var(--rbg);color:var(--red);border:1.5px solid var(--red)" onclick="authMovimiento('+a.id+',\'rechazado\')">✕ Rechazar</button>'
+            +'</div>'
+          +'</div>'
+        +'</div>';}).join('')
+      +'</div>';
+  }
+
+  if(hist.length){
+    html+='<div class="card" style="padding:0;overflow:hidden">'
+      +'<div style="padding:11px 16px;background:var(--g1);border-bottom:1px solid var(--g2);font-size:12px;font-weight:700;color:var(--g4)">HISTORIAL</div>'
+      +hist.map(function(a){
+        var u=gU(a.uid); var p=a.pid?gP(a.pid):null;
+        var ok=a.status==='aprobado';
+        return '<div style="display:flex;align-items:center;gap:10px;padding:10px 16px;border-bottom:1px solid var(--g1)">'
+          +'<span style="font-size:16px">'+(ok?'✅':'✕')+'</span>'
+          +'<div style="flex:1"><div style="font-size:12px;font-weight:600;color:var(--g5)">'+a.concepto+'</div>'
+          +'<div style="font-size:11px;color:var(--g4)">'+(u?u.name:'')+' · '+a.fecha+(p?' · '+p.name:'')+'</div></div>'
+          +'<span style="font-size:13px;font-weight:800;color:'+(a.tipo==='ingreso'?'var(--green)':'var(--red)')+'">'+( a.tipo==='ingreso'?'+':'-')+fmt(a.monto)+'</span>'
+          +'<span style="font-size:11px;font-weight:700;color:'+(ok?'var(--green)':'var(--red)')+'">'+a.status+'</span>'
+        +'</div>';}).join('')
+      +'</div>';
+  }
+  return html;
+}
+
+// ── ACCIONES ──────────────────────────────────────────────────────────────────
+function authAprobarCot(cotId){
+  var q=DB.quotations.find(function(x){return x.id===cotId;});
+  if(!q)return;
+  if(!confirm('¿Aprobar la cotización '+cotId+' por '+fmt(q.total)+'?\nEsto marcará la cotización como APROBADA.'))return;
+  q.status='APROBADA';
+  // Actualizar proyecto si existe
+  if(q.pid){var p=gP(q.pid);if(p){p.status='ACTIVO';p.cont=q.total;p.cot=q.total;}}
+  saveToStorage();
+  actualizarAuthBadge();
+  rAutorizaciones();
+  toast('✅ Cotización '+cotId+' aprobada');
+}
+
+function authRechazarCot(cotId){
+  var q=DB.quotations.find(function(x){return x.id===cotId;});
+  if(!q)return;
+  if(!confirm('¿Rechazar la cotización '+cotId+'?'))return;
+  q.status='RECHAZADA';
+  saveToStorage();
+  rAutorizaciones();
+  toast('✕ Cotización '+cotId+' rechazada');
+}
+
+function authCrearObra(cotId){
+  var q=DB.quotations.find(function(x){return x.id===cotId;});
+  if(!q){toast('⚠️ Cotización no encontrada');return;}
+  var p=q.pid?gP(q.pid):null;
+  if(!p){toast('⚠️ Esta cotización no tiene proyecto vinculado');return;}
+
+  // Convertir partidas de cotización a partidas de obra (agrupadas por cat)
+  var partidas=[];
+  if(q.partidas&&q.partidas.length){
+    var grupos={};
+    q.partidas.forEach(function(pt){
+      var rub=pt.cat||'OBRA GENERAL';
+      if(!grupos[rub])grupos[rub]=[];
+      grupos[rub].push(pt);
+    });
+    Object.entries(grupos).forEach(function([rub,parts]){
+      var totRub=parts.reduce(function(s,pt){return s+(pt.sub||pt.cant*pt.pu||0);},0);
+      // Una partida por concepto
+      parts.forEach(function(pt){
+        partidas.push({
+          rub:rub.toUpperCase(),
+          nom:pt.nom,
+          pres:pt.sub||Math.round(pt.cant*(pt.pu||0)),
+          gast:0, p:0
+        });
+      });
+    });
+  }
+
+  var budget=partidas.reduce(function(s,pt){return s+pt.pres;},0)||q.total;
+
+  // Generar etapas desde las categorías únicas
+  var cats=[...new Set(partidas.map(function(pt){return pt.rub;}))];
+  var stages=cats.map(function(c){return{n:c.charAt(0)+c.slice(1).toLowerCase(),p:0};});
+  if(!stages.length) stages=[{n:'Inicio',p:0},{n:'Desarrollo',p:0},{n:'Cierre',p:0}];
+
+  var wid='OBR-'+p.id.slice(0,6)+'-'+String(Date.now()).slice(-4);
+  var obra={
+    id:wid, pid:p.id, name:p.name,
+    uid:p.uid||DB.user.id,
+    addr:p.dir||'',
+    prog:0, sem:'green',
+    budget:budget, spent:0,
+    stage:stages[0].n, log:'—',
+    stages:stages,
+    partidas:partidas,
+  };
+
+  DB.works.push(obra);
+  p.status='ACTIVO';
+
+  saveToStorage();
+  actualizarAuthBadge();
+  toast('🏗️ Obra creada: '+wid+' con '+partidas.length+' partidas');
+
+  // Navegar a la obra recién creada
+  window._obraActiva=wid;
+  window._obraTab='resumen';
+  goTo('obras');
 }
 
 function authMovimiento(id, status){
-  var a=DB.preauth.find(x=>x.id===id);
-  if(!a) return;
+  var a=DB.preauth.find(function(x){return x.id===id;});
+  if(!a)return;
   a.status=status;
-
   if(status==='aprobado'){
-    // Registrar el movimiento real
     if(a.tipo==='ingreso'){
       DB.revenues.push({id:DB.revenues.length+1,pid:a.pid||null,type:a.concepto,amount:a.monto,date:a.fecha,ref:''});
       if(a.pid){var p=gP(a.pid);if(p)p.cob=(p.cob||0)+a.monto;}
@@ -3303,13 +3861,12 @@ function authMovimiento(id, status){
       if(a.pid){var p=gP(a.pid);if(p)p.gast=(p.gast||0)+a.monto;}
     }
     toast('✅ Movimiento aprobado y registrado');
-  } else {
-    toast('✕ Movimiento rechazado');
-  }
-
+  } else { toast('✕ Movimiento rechazado'); }
+  saveToStorage();
   actualizarAuthBadge();
   rAutorizaciones();
 }
+
 // ═══════════════════════════════════════
 // ELIMINAR — funciones globales
 // ═══════════════════════════════════════
