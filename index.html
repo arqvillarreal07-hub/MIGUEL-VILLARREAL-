@@ -387,10 +387,10 @@ function logout(){DB.user=null;pin='';udots();$('LS').style.display='flex';$('ap
 // ═══════════════ PERMISOS POR ROL ═══════════════
 const PERMISOS = {
   1: ['dashboard','autorizaciones','crm','proyectos','cotizaciones','obras','entregaplanos',
-      'clientes','legal','finanzas','compras','proveedores','caja','cotizador',
+      'clientes','legal','finanzas','compras','proveedores','caja',
       'portal','estadocuenta','personal'],                                   // Miguel — todo
   2: ['proyectos','cotizaciones','obras','entregaplanos',
-      'clientes','legal','cotizador','portal'],                              // Alejandro — Proyectos
+      'clientes','legal','portal'],                              // Alejandro — Proyectos
   3: ['obras','proyectos','entregaplanos',
       'compras','caja','personal','clientes'],                               // Luis — Construcción
   4: ['dashboard','crm','proyectos','finanzas','estadocuenta',
@@ -432,7 +432,6 @@ const NAV_ITEMS = {
     {p:'personal',       ico:'👷', lbl:'Personal · Nómina'},
   ],
   'Herramientas': [
-    {p:'cotizador',      ico:'🧮', lbl:'Cotizador m²'},
     {p:'portal',         ico:'🌐', lbl:'Portal Cliente'},
     {p:'estadocuenta',   ico:'🏦', lbl:'Estado de Cuenta'},
   ]
@@ -653,7 +652,7 @@ function rCRM(){
           </div>
         </div>`;
       }).join('')}
-    </div>
+    ].map(function(arr){var t=arr[0],l=arr[1],n=arr[2];var act=t===tab;return '<button data-tab="'+t+'" onclick="cotTab(this.dataset.tab)" style="flex:1;min-width:90px;padding:8px 10px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;background:'+(act?'var(--navy)':'transparent')+';color:'+(act?'#fff':'var(--g4)')+'">'+ l+(n!==null?' <span style=\"background:'+(act?'var(--gold)':'var(--g2)')+';\">'+ n+'</span>':'')+'</button>';}).join('')}
   </div>`;
 }
 function openPrD(id){
@@ -898,41 +897,132 @@ function saveNuevoProyecto(){
 // COTIZACIONES
 // ══════════════════════════════════════
 function rCots(){
-  const ap=DB.quotations.filter(q=>q.status==='APROBADA');
-  const TIPO_ICO={'Libre':'📝','Proyecto Arq.':'🏛️','Honorarios':'📐','Construcción':'🏗️','Remodelación':'🔧'};
+  var tab = window._cotTab || 'lista';
+  window._cotTab = tab;
+
+  var TIPO_ICO={'Libre':'📝','Proyecto Arq.':'🏛️','Honorarios':'📐','Construcción':'🏗️','Remodelación':'🔧'};
+  var ap=DB.quotations.filter(function(q){return q.status==='APROBADA';});
+  var enProc=DB.quotations.filter(function(q){return q.status==='BORRADOR'||q.status==='EN NEGOCIACIÓN';});
+
   $('MN').innerHTML=`
   <div class="ph3">
-    <div><div class="pt">Cotizaciones</div><div class="ps">${DB.quotations.length} cotizaciones</div></div>
-    <button class="btn bp" onclick="rNuevaCot()">+ Nueva cotización</button>
+    <div><div class="pt">📄 Cotizaciones</div>
+    <div class="ps">${DB.quotations.length} cotizaciones · ${ap.length} aprobadas</div></div>
+    <div id="cot_ph_btn"></div>
   </div>
+
+  <!-- TABS -->
+  <div style="background:#fff;border:1px solid var(--g2);border-radius:12px;padding:5px;display:flex;gap:3px;overflow-x:auto;-webkit-overflow-scrolling:touch">
+    ${[
+      ['lista',   '📋 Cotizaciones',   DB.quotations.length],
+      ['nueva',   '✏️ Nueva',          null],
+      ['m2',      '🧮 Por m²',         null],
+      ['libre',   '📝 Libre / IA',     null],
+    ].map(function(arr){var t=arr[0],l=arr[1],n=arr[2];var act=t===tab;return '<button data-tab="'+t+'" onclick="cotTab(this.dataset.tab)" style="flex:1;min-width:90px;padding:8px 10px;border:none;border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;background:'+(act?'var(--navy)':'transparent')+';color:'+(act?'#fff':'var(--g4)')+'">'+ l+(n!==null?' <span style=\"background:'+(act?'var(--gold)':'var(--g2)')+';\">'+ n+'</span>':'')+'</button>';}).join('')}
+  </div>
+
+  <div id="cot_tab_content"></div>`;
+
+  cotRenderTab(tab);
+}
+
+function cotTab(tab){
+  window._cotTab = tab;
+  rCots();
+}
+
+function cotRenderTab(tab){
+  var el=document.getElementById('cot_tab_content');
+  var btnEl=document.getElementById('cot_ph_btn');
+  if(btnEl){
+    if(tab==='lista'){
+      btnEl.innerHTML='<button class="btn bp" data-tab="nueva" onclick="cotTab(this.dataset.tab)">+ Nueva cotizaci\xf3n</button>';
+    } else {
+      btnEl.innerHTML='<button class="btn bo" data-tab="lista" onclick="cotTab(this.dataset.tab)">← Lista</button>';
+    }
+  }
+  if(!el) return;
+  if(tab==='lista')    el.innerHTML=cotHtmlLista();
+  else if(tab==='nueva') { rNuevaCot(); }
+  else if(tab==='m2')  { rCotizadorInline(el); }
+  else if(tab==='libre') { rCotizadorLibreInline(el); }
+}
+
+function cotHtmlLista(){
+  var TIPO_ICO={'Libre':'📝','Proyecto Arq.':'🏛️','Honorarios':'📐','Construcción':'🏗️','Remodelación':'🔧'};
+  if(!DB.quotations.length) return `
+  <div class="card" style="text-align:center;padding:52px 24px;color:var(--g4)">
+    <div style="font-size:44px;margin-bottom:12px">📄</div>
+    <div style="font-size:15px;font-weight:700;color:var(--g5);margin-bottom:6px">Sin cotizaciones</div>
+    <div style="font-size:13px;margin-bottom:20px">Crea tu primera cotización usando los modos disponibles</div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <button class="btn bp" onclick="cotTab('nueva')">✏️ Cotización por partidas</button>
+      <button class="btn bo" onclick="cotTab('m2')">🧮 Por m²</button>
+      <button class="btn bo" onclick="cotTab('libre')">📝 Libre / IA</button>
+    </div>
+  </div>`;
+
+  var ap=DB.quotations.filter(function(q){return q.status==='APROBADA';});
+  var en=DB.quotations.filter(function(q){return q.status==='BORRADOR'||q.status==='EN NEGOCIACIÓN';});
+
+  return `
   <div class="kg" style="grid-template-columns:repeat(4,1fr)">
     <div class="kc"><div class="kl">Aprobadas</div><div class="kv grn">${ap.length}</div></div>
-    <div class="kc"><div class="kl">En proceso</div><div class="kv amb">${DB.quotations.filter(q=>['BORRADOR','EN NEGOCIACIÓN'].includes(q.status)).length}</div></div>
-    <div class="kc"><div class="kl">Monto aprobado</div><div class="kv gld">${fK(ap.reduce((s,q)=>s+q.total,0))}</div></div>
-    <div class="kc"><div class="kl">Margen prom.</div><div class="kv">${ap.length?(ap.reduce((s,q)=>s+q.margin,0)/ap.length).toFixed(1):'—'}%</div></div>
+    <div class="kc"><div class="kl">En proceso</div><div class="kv amb">${en.length}</div></div>
+    <div class="kc"><div class="kl">Monto aprobado</div><div class="kv gld">${fK(ap.reduce(function(s,q){return s+q.total;},0))}</div></div>
+    <div class="kc"><div class="kl">Margen prom.</div><div class="kv">${ap.length?(ap.reduce(function(s,q){return s+q.margin;},0)/ap.length).toFixed(1):'—'}%</div></div>
   </div>
-  <div class="card" style="padding:0">
-    <div class="tw"><table>
-      <thead><tr><th>Cotización</th><th>Tipo</th><th>Cliente / Proyecto</th><th>Total</th><th>Estado</th><th>Fecha</th><th></th></tr></thead>
-      <tbody>${DB.quotations.map((q,i)=>{
-        const c=gC(q.cid);const proj=q.pid?gP(q.pid):null;
-        const ico=TIPO_ICO[q.tipo]||'📄';
-        return`<tr>
-          <td><div style="font-weight:700">${q.id}</div><div class="sub">V${q.v}</div></td>
-          <td><span class="bdg bgr">${ico} ${q.tipo||'General'}</span></td>
-          <td><div style="font-weight:600;font-size:12px">${(c&&c.name)}</div><div class="sub">${(proj&&proj.name)||'Sin proyecto'}</div></td>
-          <td><span class="amt gd">${fmt(q.total)}</span></td>
-          <td>${bd(q.status)}</td>
-          <td style="font-size:12px;color:var(--g4)">${q.date}</td>
-          <td style="white-space:nowrap">
-            <button class="btn bo bsm" onclick="openCotD(${i})">Ver</button>
-            <button class="btn bo bsm" style="margin-left:4px" onclick="pdfCot(${i})">PDF</button>
-            <button class="btn bsm" style="margin-left:4px;background:var(--rbg);color:var(--red);border:1px solid var(--red)" onclick="event.stopPropagation();eliminarCot(${i})">🗑️</button>
-          </td></tr>`;
-      }).join('')}</tbody>
-    </table></div>
+  <div class="card" style="padding:0;overflow:hidden">
+    <table style="width:100%;border-collapse:collapse">
+      <thead><tr style="background:var(--g1)">
+        <th style="padding:10px 14px;text-align:left;font-size:11px;color:var(--g4);font-weight:700">COTIZACIÓN</th>
+        <th style="padding:10px 12px;text-align:left;font-size:11px;color:var(--g4);font-weight:700">TIPO</th>
+        <th style="padding:10px 12px;text-align:left;font-size:11px;color:var(--g4);font-weight:700">CLIENTE / PROYECTO</th>
+        <th style="padding:10px 12px;text-align:right;font-size:11px;color:var(--g4);font-weight:700">TOTAL</th>
+        <th style="padding:10px 12px;text-align:center;font-size:11px;color:var(--g4);font-weight:700">ESTADO</th>
+        <th style="padding:10px 12px;text-align:center;font-size:11px;color:var(--g4);font-weight:700">FECHA</th>
+        <th style="padding:10px 10px;width:110px"></th>
+      </tr></thead>
+      <tbody>
+        ${DB.quotations.map(function(q,i){
+          var c=gC(q.cid); var proj=q.pid?gP(q.pid):null;
+          var ico=TIPO_ICO[q.tipo]||'📄';
+          return '<tr style="border-top:1px solid var(--g1);cursor:pointer" onclick="openCotD('+i+')">'
+            +'<td style="padding:10px 14px"><div style="font-weight:800;color:var(--navy)">'+q.id+'</div><div style="font-size:11px;color:var(--g4)">V'+q.v+'</div></td>'
+            +'<td style="padding:10px 12px"><span class="bdg bgr">'+ico+' '+( q.tipo||'General')+'</span></td>'
+            +'<td style="padding:10px 12px"><div style="font-weight:600;font-size:12px">'+(c&&c.name||'—')+'</div><div style="font-size:11px;color:var(--g4)">'+(proj&&proj.name||'Sin proyecto')+'</div></td>'
+            +'<td style="padding:10px 12px;text-align:right"><span class="amt gd">'+fmt(q.total)+'</span></td>'
+            +'<td style="padding:10px 12px;text-align:center">'+bd(q.status)+'</td>'
+            +'<td style="padding:10px 12px;text-align:center;font-size:12px;color:var(--g4)">'+q.date+'</td>'
+            +'<td style="padding:10px 8px;text-align:center;white-space:nowrap" onclick="event.stopPropagation()">'
+              +'<button class="btn bo bsm" onclick="openCotD('+i+')">Ver</button> '
+              +'<button class="btn bo bsm" onclick="pdfCot('+i+')">PDF</button> '
+              +'<button class="btn bsm" style="background:var(--rbg);color:var(--red);border:1px solid var(--red)" onclick="eliminarCot('+i+')">🗑️</button>'
+            +'</td>'
+          +'</tr>';}).join('')}
+      </tbody>
+    </table>
+  </div>
+  <!-- Acceso rápido a modos -->
+  <div style="display:flex;gap:10px;flex-wrap:wrap;padding:4px 0">
+    <button class="btn bg bsm" onclick="cotTab('nueva')">✏️ Nueva cotización por partidas</button>
+    <button class="btn bo bsm" onclick="cotTab('m2')">🧮 Cotizar por m²</button>
+    <button class="btn bo bsm" onclick="cotTab('libre')">📝 Cotizador libre / IA</button>
   </div>`;
 }
+
+// Adaptadores para renderizar cotizador m² y libre dentro del div de cotizaciones
+function rCotizadorInline(container){
+  // Llamar rCotizador() pero poner contenido en container, no en MN completo
+  if(container) container.innerHTML='<div id="cot_m2_inner"></div>';
+  rCotizador();  // rCotizador ya tiene su propio contenido — dejamos que rellene MN
+  // Para el modo inline dentro del tab, simplemente llamamos la función original
+}
+
+function rCotizadorLibreInline(container){
+  rCotizadorLibre();
+}
+
 
 // ──── EDITOR COMPLETO DE COTIZACIÓN (full-page en MN) ────
 var _cotPartidas=[]; // filas de partidas mientras se edita
@@ -958,7 +1048,7 @@ function rNuevaCot(editIdx){
   $('MN').innerHTML=`
   <div style="background:var(--g1);border-radius:12px 12px 0 0;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;z-index:10;border-bottom:2px solid var(--g2)">
     <div style="display:flex;align-items:center;gap:12px">
-      <button class="btn bo bsm" onclick="rCots()">← Volver</button>
+      <button class="btn bo bsm" onclick="cotTab('lista')">← Volver</button>
       <div>
         <div style="font-size:16px;font-weight:800;color:var(--navy)">${_cotEditing!=null?'Editar':'Nueva'} Cotización</div>
         <div style="font-size:11px;color:var(--g4)">${num}</div>
@@ -1488,13 +1578,13 @@ function _doSaveCot(status){
     DB.quotations.unshift(cotObj);
     toast('✅ Cotización '+num+' creada');
   }
-  rCots();
+  cotTab('lista');
 }
 
 // Mantener saveCot para compatibilidad
 function saveCot(){ _doSaveCot('BORRADOR'); }
 
-function openNewCot(){ rNuevaCot(); }
+function openNewCot(){ cotTab('nueva'); }
 
 
 // Crear proyecto desde el editor de cotización
@@ -3452,6 +3542,7 @@ function rCotizador(){
   <div class="ph3">
     <div><div class="pt">📐 Cotizador Paramétrico por m²</div>
     <div class="ps">Calibrado con tus proyectos reales · ADMON_AV_2025</div></div>
+    <button class="btn bo bsm" onclick="cotTab('lista')">← Cotizaciones</button>
   </div>
   <div class="g2c">
     <!-- PANEL IZQUIERDO -->
@@ -6288,6 +6379,7 @@ function rCotizadorLibre(){
       <div class="ps">Cotizaciones por concepto · Importa PDF/imagen con IA</div>
     </div>
     <div style="display:flex;gap:8px">
+      <button class="btn bo bsm" onclick="cotTab('lista')">← Cotizaciones</button>
       <button class="btn bo" onclick="clLimpiar()">🗑 Limpiar</button>
       <button class="btn bp" onclick="clPDF()">🖨 Imprimir / PDF</button>
     </div>
