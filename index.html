@@ -821,9 +821,15 @@ function openNuevoProyecto(){
     </div>
     <div class="fr2">
       <div class="fg"><div class="fl">Tipo</div>
-        <select class="fsl" id="np_tipo">
-          <option>Residencial</option><option>Comercial</option><option>Industrial</option><option>Remodelación</option><option>Anteproyecto</option><option>Mixto</option>
-        </select>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="fsl" id="np_tipo" style="flex:1" onchange="npTipoChange(this.value)">
+            <option>Residencial</option><option>Comercial</option><option>Industrial</option>
+            <option>Remodelación</option><option>Anteproyecto</option><option>Proyecto Ejecutivo</option>
+            <option>Construcción</option><option>Hospitalidad</option><option>Carpintería</option>
+            <option>Otro (especificar)</option>
+          </select>
+        </div>
+        <input class="fi" id="np_tipo_otro" placeholder="Especifica el tipo..." style="display:none;margin-top:6px">
       </div>
       <div class="fg"><div class="fl">Presupuesto estimado $</div><input class="fi" id="np_presup" type="number" placeholder="0"></div>
     </div>
@@ -840,6 +846,11 @@ function openNuevoProyecto(){
     <div class="fg"><div class="fl">Descripción / alcance</div><textarea class="fta" id="np_desc" placeholder="Describe el proyecto brevemente..."></textarea></div>
   `,`<button class="btn bo" onclick="cm()">Cancelar</button><button class="btn bp" onclick="saveNuevoProyecto()">✅ Crear Proyecto</button>`);
   setTimeout(()=>{ npFiltrarClientes(''); document.getElementById('np_nombre').focus(); },150);
+}
+function npTipoChange(val){
+  var otro = document.getElementById('np_tipo_otro');
+  if(!otro) return;
+  otro.style.display = val==='Otro (especificar)' ? 'block' : 'none';
 }
 function npFiltrarClientes(q){
   var drop=document.getElementById('np_c_drop');
@@ -873,7 +884,7 @@ function saveNuevoProyecto(){
   var pid=DB.projects.length?Math.max(...DB.projects.map(p=>p.id))+1:1;
   DB.projects.push({
     id:pid, name:nombre, cid:clienteId, uid:uid,
-    type:document.getElementById('np_tipo').value,
+    type:(function(){var s=document.getElementById('np_tipo').value; var o=document.getElementById('np_tipo_otro'); return s==='Otro (especificar)'&&o&&o.value.trim()?o.value.trim():s;})(),
     status:'ACTIVO', prog:0, stage:'Inicio',
     sem:document.getElementById('np_sem').value,
     cot:presup, cont:presup, cob:0, gast:0,
@@ -985,10 +996,13 @@ function rNuevaCot(editIdx){
       </div>
       <div class="fg">
         <div class="fl">Proyecto asociado</div>
-        <select class="fsl" id="nc_pid">
-          <option value="">— Sin proyecto —</option>
-          ${DB.projects.map(p=>`<option value="${p.id}" ${p.id==pidSel?'selected':''}>${p.name}</option>`).join('')}
-        </select>
+        <div style="display:flex;gap:8px;align-items:center">
+          <select class="fsl" id="nc_pid" style="flex:1">
+            <option value="">— Sin proyecto —</option>
+            ${DB.projects.map(p=>`<option value="${p.id}" ${p.id==pidSel?'selected':''}>${p.name}</option>`).join('')}
+          </select>
+          <button type="button" onclick="ncAbrirNuevoProyecto()" style="background:var(--navy);color:#fff;border:none;border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer;white-space:nowrap;flex-shrink:0">+ Nuevo</button>
+        </div>
       </div>
     </div>
     <div class="fg"><div class="fl">Descripción / alcance del proyecto</div><textarea class="fta" id="nc_d" placeholder="Describe el alcance, ubicación, características...">${desc}</textarea></div>
@@ -1094,71 +1108,226 @@ function cotGetTipo(){
 }
 
 
-// ── Precargar fases de Proyecto Arquitectónico ───────────────────────────────
-var COT_FASES_ARQ = {
-  'Anteproyecto': [
-    {nom:'Visita al sitio, levantamiento y análisis del terreno',cat:'Diseño',uni:'lote',cant:1,pu:0,sub:0},
-    {nom:'Programa arquitectónico y partido conceptual',cat:'Diseño',uni:'lote',cant:1,pu:0,sub:0},
-    {nom:'Plantas preliminares y zonificación',cat:'Diseño',uni:'lote',cant:1,pu:0,sub:0},
-    {nom:'Cortes, fachadas preliminares y renders conceptuales',cat:'Diseño',uni:'lote',cant:1,pu:0,sub:0},
-    {nom:'Presentación al cliente y ajustes',cat:'Diseño',uni:'lote',cant:1,pu:0,sub:0},
-  ],
-  'Proyecto Ejecutivo': [
-    {nom:'Planos arquitectónicos completos (plantas, cortes, fachadas)',cat:'Diseño',uni:'lote',cant:1,pu:0,sub:0},
-    {nom:'Planos estructurales',cat:'Diseño',uni:'lote',cant:1,pu:0,sub:0},
-    {nom:'Planos hidráulicos y sanitarios',cat:'Diseño',uni:'lote',cant:1,pu:0,sub:0},
-    {nom:'Planos eléctricos y especiales',cat:'Diseño',uni:'lote',cant:1,pu:0,sub:0},
-    {nom:'Planos de acabados y detalles constructivos',cat:'Diseño',uni:'lote',cant:1,pu:0,sub:0},
-    {nom:'Perspectivas y renders de presentación',cat:'Diseño',uni:'lote',cant:1,pu:0,sub:0},
-  ],
-  'Trámites y Permisos': [
-    {nom:'Gestión de licencia de construcción',cat:'Trámites',uni:'lote',cant:1,pu:0,sub:0},
-    {nom:'Memorias de cálculo estructural',cat:'Trámites',uni:'lote',cant:1,pu:0,sub:0},
-    {nom:'Trámites ante CONAGUA / SEMARNAT (si aplica)',cat:'Trámites',uni:'lote',cant:1,pu:0,sub:0},
-  ],
-  'Dirección de Obra': [
-    {nom:'Supervisión semanal de obra',cat:'Supervisión',uni:'visitas',cant:20,pu:0,sub:0},
-    {nom:'Coordinación de contratistas y proveedores',cat:'Supervisión',uni:'lote',cant:1,pu:0,sub:0},
-    {nom:'Bitácora de obra y reportes de avance',cat:'Supervisión',uni:'lote',cant:1,pu:0,sub:0},
-    {nom:'Control de calidad y ajustes de proyecto',cat:'Supervisión',uni:'lote',cant:1,pu:0,sub:0},
-  ],
-  'Entrega y Cierre': [
-    {nom:'Entrega formal del proyecto terminado',cat:'Entrega',uni:'lote',cant:1,pu:0,sub:0},
-    {nom:'Expediente as-built (planos finales)',cat:'Entrega',uni:'lote',cant:1,pu:0,sub:0},
-    {nom:'Garantía de revisión por defectos',cat:'Entrega',uni:'lote',cant:1,pu:0,sub:0},
-  ],
+// ════════════════════════════════════════════════════════════════════════
+// COTIZADOR PROYECTO ARQ — Entregables toggleables + cálculo por m²
+// ════════════════════════════════════════════════════════════════════════
+var COT_ARQ_ENTREGABLES = {
+  'Anteproyecto': {
+    ico:'🏛️', color:'#7C3AED', bg:'#F3E8FF',
+    desc:'Concepto, partido y primeras visualizaciones',
+    tarifas:{m2:45, lote:18000},
+    items:[
+      {nom:'Visita al sitio y levantamiento',uni:'lote',cant:1,pu:0,incluido:true},
+      {nom:'Programa arquitectónico',uni:'lote',cant:1,pu:0,incluido:true},
+      {nom:'Plantas de anteproyecto',uni:'m2',cant:0,pu:0,incluido:true},
+      {nom:'Cortes y fachadas preliminares',uni:'lote',cant:1,pu:0,incluido:true},
+      {nom:'Renders conceptuales 3D',uni:'pieza',cant:3,pu:0,incluido:true},
+      {nom:'Presentación al cliente',uni:'lote',cant:1,pu:0,incluido:true},
+    ]
+  },
+  'Proyecto Ejecutivo': {
+    ico:'📐', color:'#1565C0', bg:'#EBF5FB',
+    desc:'Planos completos para construcción y permisos',
+    tarifas:{m2:120, lote:45000},
+    items:[
+      {nom:'Plantas arquitectónicas completas',uni:'m2',cant:0,pu:0,incluido:true},
+      {nom:'Cortes, fachadas y detalles',uni:'m2',cant:0,pu:0,incluido:true},
+      {nom:'Planos estructurales',uni:'m2',cant:0,pu:0,incluido:true},
+      {nom:'Planos hidráulicos y sanitarios',uni:'m2',cant:0,pu:0,incluido:true},
+      {nom:'Planos eléctricos',uni:'m2',cant:0,pu:0,incluido:true},
+      {nom:'Planos de acabados',uni:'m2',cant:0,pu:0,incluido:false},
+      {nom:'Planos de cancelería y herrería',uni:'lote',cant:1,pu:0,incluido:false},
+      {nom:'Perspectivas y renders HD',uni:'pieza',cant:5,pu:0,incluido:false},
+    ]
+  },
+  'Trámites y Permisos': {
+    ico:'📋', color:'#E65100', bg:'#FFF3E0',
+    desc:'Gestión municipal, DRO y especialistas',
+    tarifas:{m2:25, lote:15000},
+    items:[
+      {nom:'Gestión de licencia de construcción',uni:'lote',cant:1,pu:0,incluido:true},
+      {nom:'Contratación DRO',uni:'lote',cant:1,pu:0,incluido:true},
+      {nom:'Memorias de cálculo estructural',uni:'lote',cant:1,pu:0,incluido:false},
+      {nom:'Permiso CONAGUA (si aplica)',uni:'lote',cant:1,pu:0,incluido:false},
+      {nom:'Alineamiento y número oficial',uni:'lote',cant:1,pu:0,incluido:false},
+    ]
+  },
+  'Dirección de Obra': {
+    ico:'🏗️', color:'#2E7D32', bg:'#E8F5E9',
+    desc:'Supervisión técnica y coordinación en sitio',
+    tarifas:{m2:80, lote:0, porVisita:1500},
+    items:[
+      {nom:'Visitas de supervisión semanal',uni:'visita',cant:20,pu:0,incluido:true},
+      {nom:'Coordinación de contratistas',uni:'lote',cant:1,pu:0,incluido:true},
+      {nom:'Bitácora y reportes de avance',uni:'lote',cant:1,pu:0,incluido:true},
+      {nom:'Control de calidad de materiales',uni:'lote',cant:1,pu:0,incluido:true},
+      {nom:'Ajustes de proyecto en obra',uni:'lote',cant:1,pu:0,incluido:false},
+    ]
+  },
+  'Entrega y Documentación': {
+    ico:'📦', color:'#C9A84C', bg:'#FFFDE7',
+    desc:'Cierre formal, as-built y garantía',
+    tarifas:{m2:15, lote:8000},
+    items:[
+      {nom:'Entrega formal con acta de recepción',uni:'lote',cant:1,pu:0,incluido:true},
+      {nom:'Planos as-built (obra terminada)',uni:'lote',cant:1,pu:0,incluido:true},
+      {nom:'Manual de mantenimiento',uni:'lote',cant:1,pu:0,incluido:false},
+      {nom:'Garantía 6 meses revisión',uni:'lote',cant:1,pu:0,incluido:false},
+    ]
+  },
 };
 
+var _arqM2 = 0;  // m² de diseño global
+var _arqModo = 'm2'; // 'm2' | 'lote'
+
 function cotPrecargarFasesArq(){
-  var fases=Object.keys(COT_FASES_ARQ);
-  om('🏛️ Cotización de Proyecto Arquitectónico',`
-    <div style="font-size:13px;color:var(--g5);margin-bottom:14px">Selecciona las fases a incluir en la cotización:</div>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      ${fases.map(function(f){return '<label style="display:flex;align-items:center;gap:10px;padding:10px 12px;border:1.5px solid var(--g2);border-radius:8px;cursor:pointer">'
-        +'<input type="checkbox" class="fase_chk" value="'+f+'" checked style="width:18px;height:18px">'
-        +'<div><div style="font-size:13px;font-weight:700;color:var(--navy)">'+f+'</div>'
-        +'<div style="font-size:11px;color:var(--g4)">'+COT_FASES_ARQ[f].length+' partidas incluidas</div></div>'
-        +'</label>';}).join('')}
-    </div>`,
-    `<button class="btn" onclick="cm()" style="background:var(--g2);color:var(--g5)">Cancelar</button>
-     <button class="btn bp" onclick="cotConfirmarFasesArq()">Cargar fases seleccionadas</button>`);
+  // Mostrar el panel de cotizador ARQ integrado en la cotización
+  var sec = document.getElementById('cot_partidas_sec');
+  var tabla = document.getElementById('cot_partidas_tabla');
+  if(!tabla) return;
+
+  _arqM2 = 0;
+
+  tabla.innerHTML = cotArqRenderPanel();
+  cotCalcTotal();
 }
 
-function cotConfirmarFasesArq(){
-  var checks=document.querySelectorAll('.fase_chk:checked');
-  if(!checks.length){toast('⚠️ Selecciona al menos una fase');return;}
-  _cotPartidas=[];
-  checks.forEach(function(chk){
-    var fase=chk.value;
-    (COT_FASES_ARQ[fase]||[]).forEach(function(p){
-      _cotPartidas.push({nom:'['+fase+'] '+p.nom,cat:p.cat,uni:p.uni,cant:p.cant,pu:p.pu,sub:p.sub});
-    });
-  });
-  cm();
-  cotRenderPartidas();
-  cotCalcTotal();
-  toast('✅ '+_cotPartidas.length+' partidas cargadas — ajusta los precios unitarios');
+function cotArqRenderPanel(){
+  var fases = Object.keys(COT_ARQ_ENTREGABLES);
+  var totalArq = cotArqCalcTotal();
+
+  return `<div id="arq_panel" style="display:flex;flex-direction:column;gap:12px;padding-bottom:8px">
+
+    <!-- M² y modo de cotización -->
+    <div style="background:var(--navy);border-radius:12px;padding:14px 16px;color:#fff">
+      <div style="font-size:11px;font-weight:700;opacity:.7;text-transform:uppercase;letter-spacing:.5px;margin-bottom:10px">Parámetros de cálculo</div>
+      <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <div>
+          <div style="font-size:11px;opacity:.6;margin-bottom:4px">SUPERFICIE DE DISEÑO (m²)</div>
+          <input type="number" id="arq_m2" value="${_arqM2||''}" placeholder="0" min="0"
+            oninput="_arqM2=parseFloat(this.value)||0; document.getElementById('arq_panel').outerHTML=cotArqRenderPanel(); cotCalcTotal();"
+            style="background:rgba(255,255,255,.15);color:#fff;border:1.5px solid rgba(255,255,255,.3);border-radius:8px;padding:8px 12px;font-size:18px;font-weight:800;width:110px;text-align:center">
+        </div>
+        <div>
+          <div style="font-size:11px;opacity:.6;margin-bottom:4px">MODO</div>
+          <div style="display:flex;gap:6px">
+            <button onclick="_arqModo='m2'; document.getElementById('arq_panel').outerHTML=cotArqRenderPanel(); cotCalcTotal();"
+              style="padding:7px 12px;border:1.5px solid rgba(255,255,255,.3);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;background:${_arqModo==='m2'?'var(--gold)':'transparent'};color:#fff">
+              Por m²
+            </button>
+            <button onclick="_arqModo='lote'; document.getElementById('arq_panel').outerHTML=cotArqRenderPanel(); cotCalcTotal();"
+              style="padding:7px 12px;border:1.5px solid rgba(255,255,255,.3);border-radius:8px;font-size:12px;font-weight:700;cursor:pointer;background:${_arqModo==='lote'?'var(--gold)':'transparent'};color:#fff">
+              Precio fijo
+            </button>
+          </div>
+        </div>
+        <div style="flex:1;text-align:right">
+          <div style="font-size:11px;opacity:.6;margin-bottom:2px">TOTAL PROYECTO ARQ.</div>
+          <div style="font-size:24px;font-weight:900;color:var(--gold)">${fmt(totalArq)}</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Fases con entregables -->
+    ${fases.map(function(fase){
+      var f = COT_ARQ_ENTREGABLES[fase];
+      var tarifaBase = _arqModo==='m2' ? f.tarifas.m2 : f.tarifas.lote;
+      var totalFase = cotArqCalcFase(fase);
+      var hayIncluidos = f.items.filter(function(it){return it.incluido;}).length > 0;
+      return `<div style="border:1.5px solid ${f.color}33;border-radius:10px;overflow:hidden">
+        <!-- Header fase -->
+        <div style="display:flex;align-items:center;gap:10px;padding:11px 14px;background:${f.bg};cursor:pointer"
+          onclick="cotArqToggleFase('${fase}')">
+          <span style="font-size:20px">${f.ico}</span>
+          <div style="flex:1">
+            <div style="font-size:13px;font-weight:800;color:${f.color}">${fase}</div>
+            <div style="font-size:11px;color:var(--g4)">${f.desc}</div>
+          </div>
+          <div style="text-align:right">
+            <div style="font-size:14px;font-weight:800;color:${f.color}">${fmt(totalFase)}</div>
+            ${_arqM2>0&&_arqModo==='m2'?'<div style="font-size:10px;color:var(--g4)">$'+f.tarifas.m2.toLocaleString()+'/m²</div>':''}
+          </div>
+          <input type="checkbox" ${hayIncluidos?'checked':''} onclick="event.stopPropagation();cotArqToggleFaseToda('${fase}',this.checked)"
+            style="width:18px;height:18px;cursor:pointer" title="Incluir/excluir toda esta fase">
+        </div>
+        <!-- Entregables de la fase -->
+        <div style="padding:6px 14px 10px">
+          ${f.items.map(function(item, idx){
+            var montoItem = cotArqMontoItem(fase, idx);
+            return `<div style="display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid var(--g1)">
+              <input type="checkbox" ${item.incluido?'checked':''} onchange="cotArqToggleItem('${fase}',${idx},this.checked)"
+                style="width:16px;height:16px;cursor:pointer;flex-shrink:0">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:12px;font-weight:600;color:${item.incluido?'var(--navy)':'var(--g3)'};text-decoration:${item.incluido?'none':'line-through'}">
+                  ${item.nom}
+                </div>
+                <div style="font-size:10px;color:var(--g4)">${item.uni}${item.uni!=='lote'&&item.cant>0?' × '+item.cant:''}</div>
+              </div>
+              <div style="text-align:right;min-width:80px">
+                <input type="number" value="${item.pu||''}" placeholder="${_arqModo==='m2'&&item.uni==='m2'?f.tarifas.m2:'0'}"
+                  oninput="cotArqSetPU('${fase}',${idx},parseFloat(this.value)||0)"
+                  style="width:80px;border:1px solid var(--g2);border-radius:6px;padding:4px 6px;font-size:11px;text-align:right;font-weight:700;color:${item.incluido?'var(--navy)':'var(--g3)'}">
+                <div style="font-size:10px;color:var(--g4);margin-top:2px">${montoItem>0?fmt(montoItem):''}</div>
+              </div>
+            </div>`;}).join('')}
+        </div>
+      </div>`;}).join('')}
+  </div>`;
 }
+
+function cotArqCalcTotal(){
+  var total=0;
+  Object.keys(COT_ARQ_ENTREGABLES).forEach(function(fase){total+=cotArqCalcFase(fase);});
+  return total;
+}
+
+function cotArqCalcFase(fase){
+  var f=COT_ARQ_ENTREGABLES[fase];
+  return f.items.reduce(function(s,item,idx){return s+(item.incluido?cotArqMontoItem(fase,idx):0);},0);
+}
+
+function cotArqMontoItem(fase,idx){
+  var f=COT_ARQ_ENTREGABLES[fase];
+  var item=f.items[idx];
+  if(!item.incluido) return 0;
+  if(item.pu>0) return Math.round(item.cant*item.pu);
+  // Estimar por m² si aplica
+  if(_arqModo==='m2'&&_arqM2>0){
+    var pctItem=1/f.items.filter(function(x){return x.incluido;}).length;
+    return Math.round(_arqM2*f.tarifas.m2*pctItem);
+  }
+  if(_arqModo==='lote'&&f.tarifas.lote>0){
+    var nIncl=f.items.filter(function(x){return x.incluido;}).length;
+    return nIncl>0?Math.round(f.tarifas.lote/nIncl):0;
+  }
+  return 0;
+}
+
+function cotArqSetPU(fase,idx,val){
+  COT_ARQ_ENTREGABLES[fase].items[idx].pu=val;
+  // Actualizar el total visual
+  setTimeout(cotCalcTotal,50);
+}
+
+function cotArqToggleFase(fase){
+  // Solo toggle visual (colapso) — mantenido por CSS
+}
+
+function cotArqToggleFaseToda(fase,checked){
+  COT_ARQ_ENTREGABLES[fase].items.forEach(function(it){it.incluido=checked;});
+  document.getElementById('arq_panel').outerHTML=cotArqRenderPanel();
+  cotCalcTotal();
+}
+
+function cotArqToggleItem(fase,idx,checked){
+  COT_ARQ_ENTREGABLES[fase].items[idx].incluido=checked;
+  document.getElementById('arq_panel').outerHTML=cotArqRenderPanel();
+  cotCalcTotal();
+}
+
+// Override _cotGetTotal para incluir cálculo ARQ
+var _cotGetTotal_orig = typeof _cotGetTotal==='function' ? _cotGetTotal : null;
+
 
 function cotRenderPartidas(){
   var tbl=document.getElementById('cot_partidas_tabla');
@@ -1197,6 +1366,19 @@ function cotDelPartida(i){
 }
 
 function cotCalcTotal(){
+  // Si es Proyecto Arq., calcular desde entregables
+  var tipo=cotGetTipo();
+  if(tipo==='Proyecto Arq.'&&typeof cotArqCalcTotal==='function'){
+    var subArq=cotArqCalcTotal();
+    var ivaChk=document.getElementById('cot_iva');
+    var conIva=ivaChk&&ivaChk.checked;
+    var totalArq=subArq*(conIva?1.16:1);
+    var tEl=document.getElementById('cot_total');
+    var sEl=document.getElementById('cot_subtotal');
+    if(sEl) sEl.textContent=fmt(subArq);
+    if(tEl) tEl.textContent=fmt(totalArq);
+    return;
+  }
   var sub=_cotPartidas.reduce((s,p)=>s+(p.cant*p.pu),0);
   var ivaChk=document.getElementById('cot_iva');
   var conIva=ivaChk&&ivaChk.checked;
@@ -1258,7 +1440,27 @@ function _doSaveCot(status){
   } else { clienteId=parseInt(cid); }
 
   var tipo=cotGetTipo();
-  var total=_cotGetTotal();
+  var total;
+  if(tipo==='Proyecto Arq.'&&typeof cotArqCalcTotal==='function'){
+    var subArq=cotArqCalcTotal();
+    var ivaChkSave=document.getElementById('cot_iva');
+    total=Math.round(subArq*(ivaChkSave&&ivaChkSave.checked?1.16:1));
+    // Convertir entregables ARQ a partidas guardables
+    var arqPartidas=[];
+    if(window.COT_ARQ_ENTREGABLES){
+      Object.entries(COT_ARQ_ENTREGABLES).forEach(function([fase,f]){
+        f.items.forEach(function(item,idx){
+          if(item.incluido){
+            var monto=cotArqMontoItem(fase,idx);
+            if(monto>0) arqPartidas.push({nom:'['+fase+'] '+item.nom,cat:fase,uni:item.uni,cant:item.cant||1,pu:monto,sub:monto});
+          }
+        });
+      });
+    }
+    if(arqPartidas.length) _cotPartidas=arqPartidas;
+  } else {
+    total=_cotGetTotal();
+  }
   var ivaChk=document.getElementById('cot_iva');
   var pidEl=document.getElementById('nc_pid');
   var pidVal=pidEl?parseInt(pidEl.value)||null:null;
@@ -1293,6 +1495,86 @@ function _doSaveCot(status){
 function saveCot(){ _doSaveCot('BORRADOR'); }
 
 function openNewCot(){ rNuevaCot(); }
+
+
+// Crear proyecto desde el editor de cotización
+function ncAbrirNuevoProyecto(){
+  var clienteNombre=(document.getElementById('nc_c_txt')||{}).value||'';
+  om('📋 Nuevo Proyecto',`
+    <div class="fg"><div class="fl">Nombre del proyecto *</div>
+      <input class="fi" id="nc_np_nom" placeholder="Ej. CASA GARCÍA, REMODELACIÓN LÓPEZ..." value="${clienteNombre?clienteNombre.toUpperCase():''}">
+    </div>
+    <div class="fr2">
+      <div class="fg"><div class="fl">Tipo</div>
+        <select class="fsl" id="nc_np_tipo" onchange="npTipoChange2(this.value)">
+          <option>Residencial</option><option>Comercial</option><option>Industrial</option>
+          <option>Remodelación</option><option>Anteproyecto</option><option>Proyecto Ejecutivo</option>
+          <option>Construcción</option><option>Hospitalidad</option><option>Carpintería</option>
+          <option>Otro (especificar)</option>
+        </select>
+        <input class="fi" id="nc_np_tipo_otro" placeholder="Especifica el tipo..." style="display:none;margin-top:6px">
+      </div>
+      <div class="fg"><div class="fl">Semáforo inicial</div>
+        <select class="fsl" id="nc_np_sem">
+          <option value="green">🟢 En tiempo</option>
+          <option value="amber">🟡 En revisión</option>
+          <option value="blue">🔵 Inicio</option>
+        </select>
+      </div>
+    </div>`,
+    `<button class="btn" onclick="cm()" style="background:var(--g2);color:var(--g5)">Cancelar</button>
+     <button class="btn bp" onclick="ncGuardarNuevoProyecto()">✅ Crear y vincular</button>`);
+  setTimeout(function(){var e=document.getElementById('nc_np_nom');if(e)e.focus();},100);
+}
+
+function npTipoChange2(val){
+  var o=document.getElementById('nc_np_tipo_otro');
+  if(o) o.style.display=val==='Otro (especificar)'?'block':'none';
+}
+
+function ncGuardarNuevoProyecto(){
+  var nom=(document.getElementById('nc_np_nom')||{}).value.trim();
+  if(!nom){toast('⚠️ Ingresa el nombre del proyecto');return;}
+  var tipoSel=(document.getElementById('nc_np_tipo')||{}).value;
+  var tipoOtro=(document.getElementById('nc_np_tipo_otro')||{}).value.trim();
+  var tipo=tipoSel==='Otro (especificar)'&&tipoOtro?tipoOtro:tipoSel;
+  var sem=(document.getElementById('nc_np_sem')||{}).value||'green';
+
+  // Usar el cliente ya seleccionado en la cotización si existe
+  var cTxt=(document.getElementById('nc_c_txt')||{}).value.trim();
+  var cId=(document.getElementById('nc_c_id')||{}).value;
+  var clienteId=null;
+  if(cId&&cId!=='__nuevo__'&&cId!==''){
+    clienteId=parseInt(cId);
+  } else if(cTxt){
+    clienteId=Date.now();
+    DB.clients.push({id:clienteId,name:cTxt,email:'',phone:''});
+    if(document.getElementById('nc_c_id')) document.getElementById('nc_c_id').value=clienteId;
+  }
+
+  // Generar ID de proyecto
+  var initials=nom.replace(/[^A-Za-z0-9]/g,'').slice(0,4).toUpperCase();
+  var pid=initials+'-'+new Date().getFullYear().toString().slice(2)+'-'+String(DB.projects.length+1).padStart(2,'0');
+
+  DB.projects.push({
+    id:pid, name:nom, cid:clienteId, uid:DB.user?DB.user.id:1,
+    type:tipo, status:'ACTIVO', prog:0, stage:'Inicio', sem:sem,
+    cot:0, cont:0, cob:0, gast:0, desc:'', date:today()
+  });
+
+  saveToStorage();
+  cm();
+
+  // Actualizar el select de proyecto en la cotización
+  var sel=document.getElementById('nc_pid');
+  if(sel){
+    var opt=document.createElement('option');
+    opt.value=pid; opt.textContent=nom; opt.selected=true;
+    sel.appendChild(opt);
+    sel.value=pid;
+  }
+  toast('✅ Proyecto "'+nom+'" creado y vinculado');
+}
 
 function ncFiltrarClientes(q){
   var drop=document.getElementById('nc_c_drop');
@@ -1801,7 +2083,7 @@ function rObras(){
   }
 
   var tabsHtml = ['resumen','bitacora','partidas','proyeccion','gantt'].map(function(t){
-    var labels={'resumen':'📊 Resumen','bitacora':'📓 Bitácora','partidas':'💰 Partidas','proyeccion':'📋 Proyección','gantt':'📅 Gantt'};
+    var labels={'resumen':'📊 Resumen','bitacora':'📓 Bitácora','partidas':'💰 Partidas','proyeccion':'📤 Solicitudes','gantt':'📅 Gantt'};
     var act = t===tabActivo;
     return '<button onclick="obraTab(\''+t+'\')" style="padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;background:'+(act?'var(--navy)':'transparent')+';color:'+(act?'#fff':'var(--g4)')+'">'+labels[t]+'</button>';
   }).join('');
@@ -1876,8 +2158,308 @@ function obraRenderTab(tab, wid){
   else if(tab==='bitacora') el.innerHTML=obraHtmlBitacora(obra);
   else if(tab==='partidas') el.innerHTML=obraHtmlPartidas(obra);
   else if(tab==='proyeccion') el.innerHTML=obraHtmlProyeccion(obra);
-  else if(tab==='gantt') obraRenderGantt(obra);
+  else if(tab==='gantt'){
+    var el2=document.getElementById('obra_tab_content');
+    if(el2) el2.innerHTML=obraHtmlGantt(obra);
+    setTimeout(function(){if(typeof ganttInitInteractive==='function')ganttInitInteractive(obra.id);},50);
+  }
 }
+
+
+// ── TAB: GANTT ────────────────────────────────────────────────────────────────
+var GANTT_EST = {
+  sin_iniciar: {label:'Sin iniciar', color:'#C5CDD9', bg:'#F5F7FA', dot:'#C5CDD9'},
+  en_proceso:  {label:'En proceso',  color:'#1565C0', bg:'#E3F2FD', dot:'#42A5F5'},
+  en_revision: {label:'En revisión', color:'#E65100', bg:'#FFF3E0', dot:'#FFA726'},
+  atrasado:    {label:'Atrasado',    color:'#C62828', bg:'#FFEBEE', dot:'#EF5350'},
+  terminado:   {label:'Terminado',   color:'#2E7D32', bg:'#E8F5E9', dot:'#4CAF50'},
+};
+var GANTT_COLORS=['#1B3A5C','#1565C0','#2E7D32','#E65100','#7C3AED','#C9A84C','#C62828','#00838F'];
+
+function obraHtmlGantt(obra){
+  if(!DB.gantt) DB.gantt={};
+  var tareas=DB.gantt[obra.id]||[];
+  var hoy=new Date();
+  var colW=7; var colNomW=200;
+
+  // Rango fechas
+  var minF=new Date(hoy); minF.setDate(minF.getDate()-7);
+  var maxF=new Date(hoy); maxF.setDate(maxF.getDate()+60);
+  tareas.forEach(function(t){
+    var i=new Date(t.inicio); var f=new Date(t.fin);
+    if(i<minF)minF=new Date(i);
+    if(f>maxF)maxF=new Date(f);
+  });
+  minF.setDate(minF.getDate()-3);
+  maxF.setDate(maxF.getDate()+3);
+
+  var totalDias=Math.max(30,Math.ceil((maxF-minF)/86400000));
+  var totalW=Math.max(600,totalDias*colW);
+  var hoyPx=Math.max(0,Math.round((hoy-minF)/86400000)*colW);
+
+  // Header semanas
+  var semsHtml='';
+  var d=new Date(minF);
+  d.setDate(d.getDate()-(d.getDay()||7)+1);
+  while(d<=maxF){
+    var px=Math.max(0,Math.round((d-minF)/86400000)*colW);
+    var lbl='S'+getISOWeekFromDate(d)+' '+d.toLocaleDateString('es-MX',{day:'numeric',month:'short'});
+    semsHtml+='<div style="position:absolute;left:'+px+'px;top:0;width:'+(7*colW)+'px;border-right:1px solid var(--g2);font-size:10px;font-weight:700;color:var(--g4);padding:3px 4px;white-space:nowrap;overflow:hidden">'+lbl+'</div>';
+    d.setDate(d.getDate()+7);
+  }
+
+  // Líneas lunes
+  var lineas='';
+  var dd=new Date(minF);
+  while(dd<=maxF){
+    var px2=Math.round((dd-minF)/86400000)*colW;
+    if(dd.getDay()===1) lineas+='<div style="position:absolute;left:'+px2+'px;top:0;bottom:0;width:1px;background:var(--g2)"></div>';
+    if(dd.toDateString()===hoy.toDateString()) lineas+='<div style="position:absolute;left:'+px2+'px;top:0;bottom:0;width:2px;background:rgba(201,168,76,.6);z-index:5"></div>';
+    dd.setDate(dd.getDate()+1);
+  }
+
+  // KPI avance
+  var pctG=tareas.length?Math.round(tareas.reduce(function(s,t){return s+(t.avance||0);},0)/tareas.length):0;
+
+  // Filas
+  var filas=tareas.map(function(t,idx){
+    var ini=new Date(t.inicio); var fin=new Date(t.fin);
+    var dur=Math.max(1,Math.ceil((fin-ini)/86400000));
+    var lx=Math.round((ini-minF)/86400000)*colW;
+    var wx=Math.max(10,dur*colW);
+    var est=GANTT_EST[t.est]||GANTT_EST.sin_iniciar;
+    var col=t.color||est.color;
+    var avPx=Math.round(wx*(t.avance||0)/100);
+    var atrasado=t.est!=='terminado'&&fin<hoy;
+    if(atrasado) col=GANTT_EST.atrasado.color;
+    var u=DB.users.find(function(x){return x.id===t.uid;});
+    return '<div style="display:flex;height:42px;border-bottom:1px solid var(--g1);align-items:center">'
+       +'<div style="width:'+colNomW+'px;min-width:'+colNomW+'px;padding:0 10px;background:#fff;border-right:1px solid var(--g2);z-index:2;cursor:pointer" onclick="ganttEditarTareaObra(\''+obra.id+'\','+idx+')">'  
+         +'<div style="font-size:12px;font-weight:700;color:var(--navy);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+(atrasado?'🔴 ':'')+(t.est==='terminado'?'✅ ':'')+t.nom+'</div>'
+        +'<div style="font-size:10px;color:var(--g4)">'+(t.cat||'')+(u?' · '+u.ini:'')+'</div>'
+      +'</div>'
+      +'<div style="position:relative;flex:1;height:100%;overflow:visible">'
+        +lineas
+       +'<div style="width:'+colNomW+'px;min-width:'+colNomW+'px;padding:0 10px;background:#fff;border-right:1px solid var(--g2);z-index:2;cursor:pointer" onclick="ganttEditarTareaObra(\''+obra.id+'\','+idx+')">'  
+          +'<div style="position:absolute;top:0;left:0;width:'+avPx+'px;height:100%;background:'+col+';opacity:.25;border-radius:4px"></div>'
+          +'<div style="position:absolute;inset:0;display:flex;align-items:center;padding:0 6px;gap:4px">'
+            +'<span style="font-size:10px;font-weight:800;color:'+col+';white-space:nowrap;overflow:hidden;flex:1">'+(wx>50?t.nom:'')+'</span>'
+            +'<span style="font-size:10px;font-weight:700;color:'+col+'">'+(wx>36?t.avance+'%':'')+'</span>'
+          +'</div>'
+        +'</div>'
+        +'<div style="position:absolute;left:'+hoyPx+'px;top:0;bottom:0;width:2px;background:rgba(201,168,76,.5);pointer-events:none;z-index:3"></div>'
+      +'</div>'
+    +'</div>';
+  }).join('');
+
+  return `
+  <div class="card" style="padding:12px 16px">
+    <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap">
+      <div style="flex:1">
+        <span style="font-size:12px;font-weight:700;color:var(--g4)">AVANCE · ${tareas.length} tareas</span>
+        <div style="display:flex;align-items:center;gap:8px;margin-top:4px">
+          <div class="pw" style="flex:1;height:8px"><div class="pb2 g" style="width:${pctG}%"></div></div>
+          <span style="font-size:14px;font-weight:800;color:var(--navy)">${pctG}%</span>
+        </div>
+      </div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        ${Object.entries(GANTT_EST).map(function([k,v]){var n=tareas.filter(function(t){return t.est===k;}).length;return n>0?'<span style="background:'+v.bg+';color:'+v.color+';padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700">'+v.label+' ('+n+')</span>':''}).join('')}
+      </div>
+      <div style="display:flex;gap:6px">
+        <button class="btn bg bsm" onclick="ganttNuevaTareaObra('${obra.id}')">+ Tarea</button>
+        ${DB.quotations.some(function(q){return q.pid===obra.pid&&q.partidas&&q.partidas.length;})
+          ?'<button class="btn bsm" style="background:var(--abg);color:var(--amber);border:1px solid var(--amber)" onclick="ganttImportarCotObra(\''+obra.id+'\');">📄 Importar cotización</button>'
+          :''}
+      </div>
+    </div>
+  </div>
+
+  ${tareas.length===0?`
+  <div class="card" style="text-align:center;padding:52px 24px;color:var(--g4)">
+    <div style="font-size:44px;margin-bottom:12px">📅</div>
+    <div style="font-size:15px;font-weight:700;color:var(--g5);margin-bottom:6px">Sin tareas en el Gantt</div>
+    <div style="font-size:13px;margin-bottom:20px">Agrega tareas o impórtalas desde la cotización aprobada</div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <button class="btn bg" onclick="ganttNuevaTareaObra('${obra.id}')">+ Agregar tarea</button>
+      ${DB.quotations.some(function(q){return q.pid===obra.pid&&q.partidas&&q.partidas.length;})
+        ?'<button class="btn bsm" style="background:var(--abg);color:var(--amber);border:1px solid var(--amber);padding:10px 16px" onclick="ganttImportarCotObra(\''+obra.id+'\');">📄 Importar de cotización</button>'
+        :''}
+    </div>
+  </div>`:
+  `<div class="card" style="padding:0;overflow:hidden">
+    <div style="display:flex;gap:10px;padding:8px 14px;background:var(--g1);border-bottom:1px solid var(--g2);flex-wrap:wrap">
+      ${Object.entries(GANTT_EST).map(function([k,v]){return '<span style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:'+v.color+'"><span style="width:10px;height:10px;border-radius:2px;background:'+v.dot+';display:inline-block"></span>'+v.label+'</span>';}).join('')}
+      <span style="margin-left:auto;font-size:11px;font-weight:700;color:var(--gold)">— HOY</span>
+    </div>
+    <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+      <div style="min-width:${colNomW+totalW}px">
+        <div style="display:flex;height:26px">
+          <div style="width:${colNomW}px;min-width:${colNomW}px;background:var(--g1);border-right:1px solid var(--g2);font-size:10px;font-weight:700;color:var(--g4);padding:0 10px;display:flex;align-items:center">TAREA</div>
+          <div style="flex:1;position:relative;height:26px;background:var(--g1);min-width:${totalW}px">${semsHtml}</div>
+        </div>
+        ${filas}
+      </div>
+    </div>
+  </div>`}`;
+}
+
+function ganttInitInteractive(wid){ /* ya renderizado en obraHtmlGantt */ }
+
+function getISOWeekFromDate(d){
+  var date=new Date(Date.UTC(d.getFullYear(),d.getMonth(),d.getDate()));
+  var day=date.getUTCDay()||7;
+  date.setUTCDate(date.getUTCDate()+4-day);
+  var yearStart=new Date(Date.UTC(date.getUTCFullYear(),0,1));
+  return Math.ceil((((date-yearStart)/86400000)+1)/7);
+}
+
+function ganttNuevaTareaObra(wid){
+  if(!DB.gantt)DB.gantt={};
+  if(!DB.gantt[wid])DB.gantt[wid]=[];
+  var hoy=new Date(); var fin=new Date(); fin.setDate(fin.getDate()+7);
+  om('📅 Nueva tarea Gantt',`
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div><div class="fl">Nombre *</div><input id="gt_nom" class="fi" placeholder="ej. Cimentación, Instalación eléctrica..."></div>
+      <div class="fr2">
+        <div><div class="fl">Inicio</div><input id="gt_ini" class="fi" type="date" value="${hoy.toISOString().split('T')[0]}"></div>
+        <div><div class="fl">Fin</div><input id="gt_fin" class="fi" type="date" value="${fin.toISOString().split('T')[0]}"></div>
+      </div>
+      <div class="fr2">
+        <div><div class="fl">% Avance</div>
+          <input id="gt_av" class="fi" type="range" min="0" max="100" value="0" oninput="document.getElementById('gt_av_lbl').textContent=this.value+'%'">
+          <div id="gt_av_lbl" style="text-align:center;font-size:13px;font-weight:700;color:var(--navy)">0%</div>
+        </div>
+        <div><div class="fl">Estatus</div>
+          <select id="gt_est" class="fsl">
+            ${Object.entries(GANTT_EST).map(function([k,v]){return '<option value="'+k+'">'+v.label+'</option>';}).join('')}
+          </select>
+        </div>
+      </div>
+      <div><div class="fl">Color</div>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:4px">
+          ${GANTT_COLORS.map(function(c,i){return '<div id="gc_'+i+'" data-c="'+c+'" onclick="ganttSelColor(this.dataset.c)" style="width:26px;height:26px;border-radius:6px;background:'+c+';cursor:pointer;border:3px solid transparent;transition:.1s"></div>';}).join('')}
+        </div>
+        <input type="hidden" id="gt_color" value="${GANTT_COLORS[0]}">
+      </div>
+    </div>`,
+    `<button class="btn" onclick="cm()" style="background:var(--g2);color:var(--g5)">Cancelar</button>
+     <button class="btn bp" onclick="ganttGuardarNueva('${wid}')">Agregar</button>`);
+  setTimeout(function(){
+    var e=document.getElementById('gt_nom');if(e)e.focus();
+    ganttSelColor(GANTT_COLORS[0]);
+  },100);
+}
+
+function ganttSelColor(c){
+  var el=document.getElementById('gt_color');if(el)el.value=c;
+  GANTT_COLORS.forEach(function(col,i){
+    var d=document.getElementById('gc_'+i);
+    if(d)d.style.borderColor=(col===c?'var(--navy)':'transparent');
+  });
+}
+
+function ganttGuardarNueva(wid){
+  var nom=(document.getElementById('gt_nom')||{}).value.trim();
+  if(!nom){toast('⚠️ Ingresa el nombre');return;}
+  var ini=(document.getElementById('gt_ini')||{}).value;
+  var fin=(document.getElementById('gt_fin')||{}).value;
+  if(!ini||!fin||fin<ini){toast('⚠️ Verifica las fechas');return;}
+  if(!DB.gantt)DB.gantt={};
+  if(!DB.gantt[wid])DB.gantt[wid]=[];
+  DB.gantt[wid].push({
+    id:'GT-'+Date.now(), nom:nom,
+    cat:(document.getElementById('gt_cat')||{}).value||'General',
+    uid:null, inicio:ini, fin:fin,
+    avance:parseInt((document.getElementById('gt_av')||{}).value)||0,
+    est:(document.getElementById('gt_est')||{}).value||'sin_iniciar',
+    color:(document.getElementById('gt_color')||{}).value||GANTT_COLORS[0],
+  });
+  cm();window._obraTab='gantt';
+  var obra=DB.works.find(function(w){return w.id===wid;});
+  if(obra) document.getElementById('obra_tab_content').innerHTML=obraHtmlGantt(obra);
+  saveToStorage();toast('✅ Tarea agregada');
+}
+
+function ganttEditarTareaObra(wid,idx){
+  if(!DB.gantt||!DB.gantt[wid]||!DB.gantt[wid][idx])return;
+  var t=DB.gantt[wid][idx];
+  om('✏️ '+t.nom,`
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div><div class="fl">Nombre</div><input id="gt_nom" class="fi" value="${t.nom}"></div>
+      <div class="fr2">
+        <div><div class="fl">Inicio</div><input id="gt_ini" class="fi" type="date" value="${t.inicio}"></div>
+        <div><div class="fl">Fin</div><input id="gt_fin" class="fi" type="date" value="${t.fin}"></div>
+      </div>
+      <div class="fr2">
+        <div><div class="fl">% Avance</div>
+          <input id="gt_av" class="fi" type="range" min="0" max="100" value="${t.avance}" oninput="document.getElementById('gt_av_lbl').textContent=this.value+'%'">
+          <div id="gt_av_lbl" style="text-align:center;font-size:13px;font-weight:700;color:var(--navy)">${t.avance}%</div>
+        </div>
+        <div><div class="fl">Estatus</div>
+          <select id="gt_est" class="fsl">
+            ${Object.entries(GANTT_EST).map(function([k,v]){return '<option value="'+k+'"'+(k===t.est?' selected':'')+'>'+v.label+'</option>';}).join('')}
+          </select>
+        </div>
+      </div>
+    </div>`,
+    `<button class="btn" onclick="cm()" style="background:var(--g2);color:var(--g5)">Cancelar</button>
+     <button class="btn bsm" style="background:var(--rbg);color:var(--red);border:1px solid var(--red)" onclick="ganttEliminarTareaObra('${wid}',${idx})">🗑️</button>
+     <button class="btn bp" onclick="ganttActualizarTarea('${wid}',${idx})">Guardar</button>`);
+}
+
+function ganttActualizarTarea(wid,idx){
+  var t=DB.gantt[wid][idx]; if(!t)return;
+  t.nom=(document.getElementById('gt_nom')||{}).value.trim()||t.nom;
+  t.inicio=(document.getElementById('gt_ini')||{}).value||t.inicio;
+  t.fin=(document.getElementById('gt_fin')||{}).value||t.fin;
+  t.avance=parseInt((document.getElementById('gt_av')||{}).value)||0;
+  t.est=(document.getElementById('gt_est')||{}).value||t.est;
+  cm();
+  var obra=DB.works.find(function(w){return w.id===wid;});
+  if(obra) document.getElementById('obra_tab_content').innerHTML=obraHtmlGantt(obra);
+  saveToStorage();toast('✅ Tarea actualizada');
+}
+
+function ganttEliminarTareaObra(wid,idx){
+  if(!confirm('¿Eliminar esta tarea?'))return;
+  DB.gantt[wid].splice(idx,1);
+  cm();
+  var obra=DB.works.find(function(w){return w.id===wid;});
+  if(obra) document.getElementById('obra_tab_content').innerHTML=obraHtmlGantt(obra);
+  saveToStorage();toast('🗑️ Tarea eliminada');
+}
+
+function ganttImportarCotObra(wid){
+  var obra=DB.works.find(function(w){return w.id===wid;});
+  if(!obra)return;
+  var cot=DB.quotations.find(function(q){return q.pid===obra.pid&&q.status==='APROBADA'&&q.partidas&&q.partidas.length;});
+  if(!cot){toast('⚠️ No hay cotización aprobada con partidas');return;}
+  if(!confirm('Importar '+cot.partidas.length+' partidas de '+cot.id+' como tareas Gantt. ¿Continuar?'))return;
+  if(!DB.gantt)DB.gantt={};
+  if(!DB.gantt[wid])DB.gantt[wid]=[];
+  var cursor=new Date();
+  var durMap={'DISEÑO':14,'TRÁMITES':21,'CIMENTACIÓN':21,'OBRA CIVIL':45,'ESTRUCTURA':30,'INSTALACIONES':30,'HERRERÍA':21,'ACABADOS':30,'GENERAL':14};
+  var grupos={};
+  cot.partidas.forEach(function(p){
+    var rub=(p.cat||'GENERAL').toUpperCase();
+    if(!grupos[rub])grupos[rub]=[];
+    grupos[rub].push(p);
+  });
+  var idx2=0;
+  Object.keys(grupos).forEach(function(rub){
+    var dur=durMap[rub]||14;
+    var ini=new Date(cursor); var fin=new Date(cursor);
+    fin.setDate(fin.getDate()+dur);
+    var nom=grupos[rub].length===1?(grupos[rub][0].nom||rub).slice(0,50):(rub+' ('+grupos[rub].length+' partidas)');
+    DB.gantt[wid].push({id:'GT-'+Date.now()+'-'+idx2,nom:nom,cat:rub,uid:null,inicio:ini.toISOString().split('T')[0],fin:fin.toISOString().split('T')[0],avance:0,est:'sin_iniciar',color:GANTT_COLORS[idx2%GANTT_COLORS.length]});
+    cursor.setDate(cursor.getDate()+Math.round(dur*.7));
+    idx2++;
+  });
+  var el=document.getElementById('obra_tab_content');
+  if(el) el.innerHTML=obraHtmlGantt(obra);
+  saveToStorage();toast('✅ '+Object.keys(grupos).length+' tareas importadas');
+}
+
 
 // ── TAB: RESUMEN ──────────────────────────────────────────────────────────────
 function obraHtmlResumen(w){
@@ -3471,76 +4053,159 @@ function rDocs(){
 // PORTAL CLIENTE
 // ══════════════════════════════════════
 function rPortal(){
-  const firstAct=DB.projects.find(p=>p.status==='ACTIVO');
+  if(!DB.projects.length){
+    $('MN').innerHTML='<div class="ph3"><div><div class="pt">Portal del Cliente</div></div></div><div class="card" style="text-align:center;padding:52px;color:var(--g4)">Sin proyectos activos</div>';
+    return;
+  }
+  var activos=DB.projects.filter(function(p){return p.status==='ACTIVO'||p.status==='COTIZACIÓN';});
+  var pid=window._portalPid||(activos[0]||DB.projects[0]).id;
+  window._portalPid=pid;
+
   $('MN').innerHTML=`
   <div class="ph3">
-    <div><div class="pt">Portal del Cliente</div><div class="ps">Vista previa del portal para clientes</div></div>
-    <select class="fsel" onchange="rPortalPrj(this.value)" id="pp_sel">
-      ${DB.projects.filter(p=>p.status==='ACTIVO').map(p=>`<option value="${p.id}">${p.name}</option>`).join('')}
+    <div><div class="pt">🌐 Portal del Cliente</div><div class="ps">Vista del avance y estado de cuenta por proyecto</div></div>
+    <select class="fsel" id="pp_sel" onchange="window._portalPid=this.value;rPortal()">
+      ${DB.projects.map(function(p){return '<option value="'+p.id+'"'+(p.id===pid?' selected':'')+'>'+p.name+'</option>';}).join('')}
     </select>
   </div>
   <div id="pp_cnt"></div>`;
-  rPortalPrj((firstAct&&firstAct.id));
+  portalRenderProy(pid);
 }
-function rPortalPrj(pid){
-  const p=gP(pid);if(!p)return;
-  const c=gC(p.cid);const w=DB.works.find(x=>x.pid===pid);
-  const revs=DB.revenues.filter(r=>r.pid===pid);
-  const docs=DB.documents.filter(d=>d.pid===pid&&d.client);
-  const logs=DB.logs.filter(l=>l.wid===(w&&w.id)&&l.ok).slice(0,3);
-  const totCob=revs.reduce((s,r)=>s+r.amount,0);
 
-  $('pp_cnt').innerHTML=`
-  <div style="max-width:580px;margin:0 auto">
-    <div class="pcard">
-      <div style="font-size:22px;font-weight:800;margin-bottom:3px">Hola, ${(c&&c.name)}</div>
-      <div style="font-size:13px;opacity:.7;margin-bottom:18px">${p.name} · ${p.type}</div>
+function portalRenderProy(pid){
+  var el=document.getElementById('pp_cnt');if(!el)return;
+  var p=gP(pid);if(!p){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--g4)">Proyecto no encontrado</div>';return;}
+  var c=gC(p.cid);
+  var w=DB.works.find(function(x){return x.pid===pid;});
+  var cot=DB.quotations.find(function(q){return q.pid===pid&&q.status==='APROBADA';});
+  var pagos=(DB.pagos||[]).filter(function(pg){return pg.pid===pid;});
+  var docs=DB.documents.filter(function(d){return d.pid===pid&&d.client;});
+  var logs=DB.logs.filter(function(l){return l.wid===(w&&w.id)&&l.ok;}).slice(0,3);
+  var totalPagado=pagos.reduce(function(s,pg){return s+pg.monto;},0);
+  var totalContrato=p.cont||p.cot||0;
+  var pendiente=totalContrato-totalPagado;
+
+  // Etapas con pagos
+  // Derivar etapas de: condiciones de pago del contrato o partidas de obra agrupadas
+  var etapas=[];
+  if(cot&&cot.condPago){
+    cot.condPago.split('·').forEach(function(cond,i){
+      var match=cond.match(/(\d+)%/);
+      if(match){
+        var pct=parseInt(match[1]);
+        var monto=Math.round(totalContrato*pct/100);
+        var pagosEtapa=pagos.filter(function(pg){return pg.estNum===i+1;});
+        var cobrado=pagosEtapa.reduce(function(s,pg){return s+pg.monto;},0);
+        etapas.push({num:i+1,desc:cond.trim(),pct:pct,monto:monto,cobrado:cobrado});
+      }
+    });
+  }
+
+  // Si no hay etapas de contrato, usar rubros de obra
+  if(!etapas.length&&w&&w.stages&&w.stages.length){
+    w.stages.forEach(function(s,i){
+      var montoEtapa=totalContrato>0?Math.round(totalContrato/w.stages.length):0;
+      etapas.push({num:i+1,desc:s.n,pct:Math.round(100/w.stages.length),monto:montoEtapa,cobrado:0,avance:s.p});
+    });
+  }
+
+  var colorPct=totalContrato>0?Math.round(totalPagado/totalContrato*100):0;
+
+  el.innerHTML=`
+  <div style="max-width:640px;margin:0 auto;display:flex;flex-direction:column;gap:14px">
+
+    <!-- Header proyecto -->
+    <div style="background:var(--navy);border-radius:14px;padding:22px 24px;color:#fff">
+      <div style="font-size:12px;opacity:.6;text-transform:uppercase;letter-spacing:.5px;margin-bottom:4px">Proyecto</div>
+      <div style="font-size:22px;font-weight:900;letter-spacing:-.5px;margin-bottom:2px">${p.name}</div>
+      <div style="font-size:13px;opacity:.7;margin-bottom:14px">${c?c.contact||c.name:'—'} · ${p.type}</div>
       <div style="display:flex;align-items:center;gap:12px">
-        <div style="flex:1"><div class="pprog"><div class="ppb" style="width:${p.prog}%"></div></div>
-        <div style="font-size:12px;opacity:.7;margin-top:4px">Avance: ${p.prog}% completado</div></div>
-        <div style="font-size:30px;font-weight:800;color:var(--gold)">${p.prog}%</div>
+        <div style="flex:1">
+          <div style="background:rgba(255,255,255,.15);border-radius:20px;height:10px;overflow:hidden">
+            <div style="height:100%;background:var(--gold);border-radius:20px;width:${p.prog}%;transition:width .4s"></div>
+          </div>
+          <div style="font-size:11px;opacity:.6;margin-top:4px">Avance físico ${p.prog}% · Etapa: ${(w&&w.stage)||p.stage||'Inicio'}</div>
+        </div>
+        <div style="font-size:36px;font-weight:900;color:var(--gold)">${p.prog}%</div>
       </div>
-      <div style="margin-top:10px;font-size:13px;opacity:.8">📍 Etapa actual: <strong>${(w&&w.stage)||'—'}</strong> · Últ. actualización: ${(w&&w.log)||'—'}</div>
     </div>
-    ${w?`<div class="card" style="margin-bottom:14px">
-      <div class="ch"><div class="ct">📊 Avance por etapas</div></div>
-      ${w.stages.map(s=>`<div style="display:flex;align-items:center;gap:9px;margin-bottom:7px">
-        <div style="width:125px;font-size:12px;color:var(--g5)">${s.n}</div>
-        <div class="pw" style="flex:1"><div class="pb2 ${s.p===100?'g':s.p>50?'n':'a'}" style="width:${s.p}%"></div></div>
-        <div style="font-size:12px;font-weight:700;width:28px;text-align:right">${s.p}%</div>
-      </div>`).join('')}
-    </div>`:''}
-    ${logs.length?`<div class="card" style="margin-bottom:14px">
-      <div class="ch"><div class="ct">📓 Últimas actualizaciones</div></div>
-      ${logs.map(l=>`<div style="border-bottom:1px solid var(--g2);padding:9px 0">
-        <div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:3px">${l.date}</div>
-        <div style="font-size:13px;color:var(--g5);line-height:1.4">${l.summary}</div>
-        ${l.photos?`<div style="font-size:11px;color:var(--gold);margin-top:3px">📷 ${l.photos} foto${l.photos>1?'s':''}</div>`:''}
-      </div>`).join('')}
-    </div>`:''}
-    <div class="card" style="margin-bottom:14px">
-      <div class="ch"><div class="ct">💵 Mi cuenta corriente</div></div>
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:11px">
-        <div style="text-align:center;background:var(--g1);border-radius:8px;padding:11px"><div style="font-size:10px;color:var(--g4);margin-bottom:3px">VALOR TOTAL</div><div style="font-size:13px;font-weight:800;color:var(--navy)">${fK(p.cont)}</div></div>
-        <div style="text-align:center;background:var(--gbg);border-radius:8px;padding:11px"><div style="font-size:10px;color:var(--green);margin-bottom:3px">PAGADO</div><div style="font-size:13px;font-weight:800;color:var(--green)">${fK(totCob)}</div></div>
-        <div style="text-align:center;background:var(--abg);border-radius:8px;padding:11px"><div style="font-size:10px;color:var(--amber);margin-bottom:3px">PENDIENTE</div><div style="font-size:13px;font-weight:800;color:var(--amber)">${fK(p.cont-totCob)}</div></div>
+
+    <!-- Etapas y pagos por etapa — LA PARTE CLAVE -->
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:12px 16px;background:var(--g1);border-bottom:1px solid var(--g2);display:flex;justify-content:space-between;align-items:center">
+        <div style="font-size:13px;font-weight:800;color:var(--navy)">📋 Etapas del proyecto y pagos</div>
+        <div style="font-size:12px;color:var(--g4)">Contrato: <strong style="color:var(--navy)">${fmt(totalContrato)}</strong></div>
       </div>
-      ${revs.map(r=>`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px solid var(--g2);font-size:12px">
-        <span>${r.type} · ${r.date}</span><span class="amt g">${fmt(r.amount)}</span>
-      </div>`).join('')}
+      ${etapas.length===0?'<div style="padding:24px;text-align:center;color:var(--g4)">Sin etapas definidas — aprueba una cotización para verlas aquí</div>':
+      etapas.map(function(e){
+        var est=e.cobrado>=e.monto?'pagada':e.cobrado>0?'parcial':'pendiente';
+        var estStyle={pagada:{bg:'var(--gbg)',color:'var(--green)',icon:'✅',label:'Pagada'},parcial:{bg:'var(--abg)',color:'var(--amber)',icon:'⏳',label:'Parcial'},pendiente:{bg:'var(--g1)',color:'var(--g4)',icon:'○',label:'Pendiente'}}[est];
+        return '<div style="padding:14px 16px;border-bottom:1px solid var(--g1)">'
+          +'<div style="display:flex;align-items:flex-start;gap:12px">'
+            +'<div style="width:32px;height:32px;border-radius:50%;background:'+(est==='pagada'?'var(--green)':est==='parcial'?'var(--amber)':'var(--g3)')+';color:#fff;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;flex-shrink:0">'+e.num+'</div>'
+            +'<div style="flex:1;min-width:0">'
+              +'<div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px">'
+                +'<div style="font-size:13px;font-weight:700;color:var(--navy)">'+e.desc+'</div>'
+                +'<span style="background:'+estStyle.bg+';color:'+estStyle.color+';padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700">'+estStyle.icon+' '+estStyle.label+'</span>'
+              +'</div>'
+              +'<div style="display:flex;justify-content:space-between;align-items:center;margin-top:6px;flex-wrap:wrap;gap:4px">'
+                +'<div style="font-size:14px;font-weight:800;color:var(--navy)">'+fmt(e.monto)+'</div>'
+                +(e.cobrado>0?'<div style="font-size:12px;color:var(--green);font-weight:700">✓ Pagado: '+fmt(e.cobrado)+'</div>':'')
+                +(e.cobrado>0&&e.cobrado<e.monto?'<div style="font-size:12px;color:var(--amber);font-weight:700">Pendiente: '+fmt(e.monto-e.cobrado)+'</div>':'')
+              +'</div>'
+              +(e.avance!==undefined?'<div style="margin-top:6px"><div class="pw" style="height:5px"><div class="pb2 '+(e.avance>=100?'g':'n')+'" style="width:'+e.avance+'%"></div></div><div style="font-size:10px;color:var(--g4);margin-top:2px">'+e.avance+'% de esta etapa</div></div>':'')
+            +'</div>'
+          +'</div>'
+        +'</div>';
+      }).join('')}
+      <!-- Resumen financiero -->
+      <div style="padding:14px 16px;background:var(--g1);border-top:2px solid var(--g2)">
+        <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:10px">
+          <div style="text-align:center;background:#fff;border-radius:8px;padding:10px"><div style="font-size:10px;color:var(--g4);font-weight:700">TOTAL CONTRATO</div><div style="font-size:14px;font-weight:800;color:var(--navy);margin-top:2px">${fmt(totalContrato)}</div></div>
+          <div style="text-align:center;background:var(--gbg);border-radius:8px;padding:10px"><div style="font-size:10px;color:var(--green);font-weight:700">PAGADO</div><div style="font-size:14px;font-weight:800;color:var(--green);margin-top:2px">${fmt(totalPagado)}</div></div>
+          <div style="text-align:center;background:${pendiente>0?'var(--abg)':'var(--gbg)'};border-radius:8px;padding:10px"><div style="font-size:10px;color:${pendiente>0?'var(--amber)':'var(--green)'};font-weight:700">PENDIENTE</div><div style="font-size:14px;font-weight:800;color:${pendiente>0?'var(--amber)':'var(--green)'};margin-top:2px">${fmt(Math.max(0,pendiente))}</div></div>
+        </div>
+        <div style="background:#fff;border-radius:8px;height:8px;overflow:hidden"><div style="height:100%;background:var(--green);border-radius:8px;width:${colorPct}%;transition:width .4s"></div></div>
+        <div style="font-size:11px;color:var(--g4);margin-top:4px;text-align:center">${colorPct}% cobrado del contrato</div>
+      </div>
     </div>
-    ${docs.length?`<div class="card">
-      <div class="ch"><div class="ct">📁 Mis documentos</div></div>
-      ${docs.map(d=>`<div style="display:flex;justify-content:space-between;align-items:center;padding:7px 0;border-bottom:1px solid var(--g2)">
-        <div><div style="font-size:13px;font-weight:600">📄 ${d.name}</div><div style="font-size:11px;color:var(--g4)">${d.cat} · ${d.size}</div></div>
-        <button class="btn bo bsm">Ver</button>
-      </div>`).join('')}
+
+    <!-- Historial de pagos -->
+    ${pagos.length?`
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:12px 16px;background:var(--g1);border-bottom:1px solid var(--g2);font-size:13px;font-weight:800;color:var(--navy)">💵 Historial de pagos</div>
+      ${pagos.slice().reverse().map(function(pg){
+        var formas={'efectivo':'💵','transferencia':'🏦','cheque':'📝','tarjeta':'💳'};
+        return '<div style="display:flex;align-items:center;gap:12px;padding:11px 16px;border-bottom:1px solid var(--g1)">'
+          +'<div style="font-size:20px">'+(formas[pg.forma]||'💵')+'</div>'
+          +'<div style="flex:1"><div style="font-size:13px;font-weight:600;color:var(--navy)">'+pg.concepto+'</div>'
+          +'<div style="font-size:11px;color:var(--g4)">'+pg.fecha+' · '+pg.folio+'</div></div>'
+          +'<div style="font-size:15px;font-weight:800;color:var(--green)">'+fmt(pg.monto)+'</div>'
+          +'</div>';}).join('')}
+    </div>`:
+    '<div class="card" style="text-align:center;padding:28px;color:var(--g4)"><div style="font-size:28px;margin-bottom:6px">💵</div><div style="font-size:13px">Sin pagos registrados aún</div></div>'}
+
+    <!-- Actualizaciones de obra -->
+    ${logs.length?`
+    <div class="card" style="padding:0;overflow:hidden">
+      <div style="padding:12px 16px;background:var(--g1);border-bottom:1px solid var(--g2);font-size:13px;font-weight:800;color:var(--navy)">📓 Últimas actualizaciones</div>
+      ${logs.map(function(l){return '<div style="padding:12px 16px;border-bottom:1px solid var(--g1)">'
+        +'<div style="font-size:12px;font-weight:700;color:var(--navy);margin-bottom:3px">'+l.date+'</div>'
+        +'<div style="font-size:13px;color:var(--g5);line-height:1.5">'+l.summary+'</div>'
+        +(l.inc?'<div style="font-size:11px;color:var(--amber);margin-top:4px">⚠️ '+l.inc+'</div>':'')
+        +'</div>';}).join('')}
     </div>`:''}
-    <div style="text-align:center;padding:18px;color:var(--g4);font-size:12px">
-      Villarreal Arquitectura · contacto@vaarq.mx · 449 000 0000
+
+    <!-- Footer -->
+    <div style="text-align:center;padding:16px;color:var(--g4);font-size:11px">
+      Villarreal Arquitectura · contacto@vaarq.mx · Aguascalientes, México
     </div>
   </div>`;
 }
+
+// Mantener rPortalPrj por compatibilidad
+function rPortalPrj(pid){ window._portalPid=pid; portalRenderProy(pid); }
+
 
 
 
