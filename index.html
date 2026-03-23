@@ -321,6 +321,7 @@ const DB={
   calendarios:{},
   proyecciones:[],
   gantt:{},
+  presupuestos:{},  // {wid: [{id,rub,nom,prov,presOrig,presActual,avance,estatus,pagos:[],sobrecostos:[],notas}]}
 };
 
 
@@ -433,7 +434,7 @@ const NAV_ITEMS = {
   ],
   'Herramientas': [
     {p:'portal',         ico:'🌐', lbl:'Portal Cliente'},
-    {p:'estadocuenta',   ico:'🏦', lbl:'Estado de Cuenta'},
+    {p:'estadocuenta',   ico:'🏦', lbl:'Conciliación Bancaria'},
   ]
 };
 
@@ -2061,6 +2062,19 @@ function cotDCrearProyectoYObra(i){
 
   DB.gantt[wid] = ganttTareas;
 
+  // Inicializar presupuesto desde partidas de cotización
+  if(!DB.presupuestos) DB.presupuestos={};
+  DB.presupuestos[wid] = partidas.map(function(pt,i){
+    return {
+      id:'PP-'+Date.now()+'-'+i,
+      rub:pt.rub, nom:pt.nom,
+      prov:'', // proveedor a asignar
+      presOrig:pt.pres, presActual:pt.pres,
+      avance:0, estatus:'pendiente',
+      pagos:[], sobrecostos:[], notas:''
+    };
+  });
+
   saveToStorage();
   actualizarAuthBadge();
 
@@ -2172,8 +2186,8 @@ function rObras(){
     return;
   }
 
-  var tabsHtml = ['resumen','bitacora','partidas','proyeccion','gantt'].map(function(t){
-    var labels={'resumen':'📊 Resumen','bitacora':'📓 Bitácora','partidas':'💰 Partidas','proyeccion':'📤 Solicitudes','gantt':'📅 Gantt'};
+  var tabsHtml = ['resumen','presupuesto','bitacora','proyeccion','gantt'].map(function(t){
+    var labels={'resumen':'📊 Resumen','presupuesto':'🏗️ Presupuesto','bitacora':'📓 Bitácora','proyeccion':'📤 Solicitudes','gantt':'📅 Gantt'};
     var act = t===tabActivo;
     return '<button onclick="obraTab(\''+t+'\')" style="padding:8px 16px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;background:'+(act?'var(--navy)':'transparent')+';color:'+(act?'#fff':'var(--g4)')+'">'+labels[t]+'</button>';
   }).join('');
@@ -2245,6 +2259,7 @@ function obraRenderTab(tab, wid){
   if(!obra){el.innerHTML='<div style="padding:40px;text-align:center;color:var(--g4)">Selecciona una obra</div>';return;}
 
   if(tab==='resumen') el.innerHTML=obraHtmlResumen(obra);
+  else if(tab==='presupuesto') el.innerHTML=obraHtmlPresupuesto(obra);
   else if(tab==='bitacora') el.innerHTML=obraHtmlBitacora(obra);
   else if(tab==='partidas') el.innerHTML=obraHtmlPartidas(obra);
   else if(tab==='proyeccion') el.innerHTML=obraHtmlProyeccion(obra);
@@ -2353,7 +2368,7 @@ function obraHtmlGantt(obra){
         </div>
       </div>
       <div style="display:flex;gap:6px;flex-wrap:wrap">
-        ${Object.entries(GANTT_EST).map(function([k,v]){var n=tareas.filter(function(t){return t.est===k;}).length;return n>0?'<span style="background:'+v.bg+';color:'+v.color+';padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700">'+v.label+' ('+n+')</span>':''}).join('')}
+        ${Object.entries(GANTT_EST).map(function(__e){var k=__e[0],v=__e[1];var n=tareas.filter(function(t){return t.est===k;}).length;return n>0?'<span style="background:'+v.bg+';color:'+v.color+';padding:3px 8px;border-radius:20px;font-size:11px;font-weight:700">'+v.label+' ('+n+')</span>':''}).join('')}
       </div>
       <div style="display:flex;gap:6px">
         <button class="btn bg bsm" onclick="ganttNuevaTareaObra('${obra.id}')">+ Tarea</button>
@@ -2378,7 +2393,7 @@ function obraHtmlGantt(obra){
   </div>`:
   `<div class="card" style="padding:0;overflow:hidden">
     <div style="display:flex;gap:10px;padding:8px 14px;background:var(--g1);border-bottom:1px solid var(--g2);flex-wrap:wrap">
-      ${Object.entries(GANTT_EST).map(function([k,v]){return '<span style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:'+v.color+'"><span style="width:10px;height:10px;border-radius:2px;background:'+v.dot+';display:inline-block"></span>'+v.label+'</span>';}).join('')}
+      ${Object.entries(GANTT_EST).map(function(__e){var k=__e[0],v=__e[1];return '<span style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:'+v.color+'"><span style="width:10px;height:10px;border-radius:2px;background:'+v.dot+';display:inline-block"></span>'+v.label+'</span>';}).join('')}
       <span style="margin-left:auto;font-size:11px;font-weight:700;color:var(--gold)">— HOY</span>
     </div>
     <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
@@ -2421,7 +2436,7 @@ function ganttNuevaTareaObra(wid){
         </div>
         <div><div class="fl">Estatus</div>
           <select id="gt_est" class="fsl">
-            ${Object.entries(GANTT_EST).map(function([k,v]){return '<option value="'+k+'">'+v.label+'</option>';}).join('')}
+            ${Object.entries(GANTT_EST).map(function(__e){var k=__e[0],v=__e[1];return '<option value="'+k+'">'+v.label+'</option>';}).join('')}
           </select>
         </div>
       </div>
@@ -2487,7 +2502,7 @@ function ganttEditarTareaObra(wid,idx){
         </div>
         <div><div class="fl">Estatus</div>
           <select id="gt_est" class="fsl">
-            ${Object.entries(GANTT_EST).map(function([k,v]){return '<option value="'+k+'"'+(k===t.est?' selected':'')+'>'+v.label+'</option>';}).join('')}
+            ${Object.entries(GANTT_EST).map(function(__e){var k=__e[0],v=__e[1];return '<option value="'+k+'"'+(k===t.est?' selected':'')+'>'+v.label+'</option>';}).join('')}
           </select>
         </div>
       </div>
@@ -2524,7 +2539,6 @@ function ganttImportarCotObra(wid){
   if(!obra)return;
   var cot=DB.quotations.find(function(q){return q.pid===obra.pid&&q.status==='APROBADA'&&q.partidas&&q.partidas.length;});
   if(!cot){toast('⚠️ No hay cotización aprobada con partidas');return;}
-  if(!confirm('Importar '+cot.partidas.length+' partidas de '+cot.id+' como tareas Gantt. ¿Continuar?'))return;
   if(!DB.gantt)DB.gantt={};
   if(!DB.gantt[wid])DB.gantt[wid]=[];
   var cursor=new Date();
@@ -2548,6 +2562,530 @@ function ganttImportarCotObra(wid){
   var el=document.getElementById('obra_tab_content');
   if(el) el.innerHTML=obraHtmlGantt(obra);
   saveToStorage();toast('✅ '+Object.keys(grupos).length+' tareas importadas');
+}
+
+
+
+// ══════════════════════════════════════════════════════════════════════════════
+// PRESUPUESTO DE OBRA — Control por partida y proveedor con sobrecostos
+// ══════════════════════════════════════════════════════════════════════════════
+function obraHtmlPresupuesto(obra){
+  if(!DB.presupuestos) DB.presupuestos={};
+  var ps = DB.presupuestos[obra.id] || [];
+
+  // Calcular totales
+  var presTotal = ps.reduce(function(s,p){return s+(p.presActual||p.presOrig||0);},0);
+  var pagTotal  = ps.reduce(function(s,p){return s+(p.pagos||[]).reduce(function(a,x){return a+x.monto;},0);},0);
+  var sobreTotal= ps.reduce(function(s,p){return s+(p.sobrecostos||[]).reduce(function(a,x){return a+x.monto;},0);},0);
+  var disponible= presTotal - pagTotal;
+  var pctPag    = presTotal>0?Math.round(pagTotal/presTotal*100):0;
+
+  // Agrupar por rubro
+  var grupos={};
+  ps.forEach(function(p){
+    var rub=p.rub||'GENERAL';
+    if(!grupos[rub])grupos[rub]=[];
+    grupos[rub].push(p);
+  });
+
+  var rubColors={'DISEÑO':'#7C3AED','OBRA GRIS':'#1B3A5C','CIMENTACIÓN':'#1B3A5C','INSTALACIONES':'#1565C0','HERRERÍA':'#795548','ACABADOS':'#C9A84C','OTROS':'#2E7D32','INDIRECTOS':'#8A96A8','GENERAL':'#4A5568','OBRA CIVIL':'#1B3A5C'};
+
+  // Semáforo general
+  var hayRojo   = ps.some(function(p){return p.estatus==='sobrecosto';});
+  var hayAmbar  = ps.some(function(p){return p.estatus==='en_proceso';});
+  var semGlobal = hayRojo?'rd':hayAmbar?'amb':'grn';
+
+  return `
+  <!-- KPIs presupuesto -->
+  <div class="kg" style="grid-template-columns:repeat(4,1fr)">
+    <div class="kc">
+      <div class="kl">Presupuesto total</div>
+      <div class="kv gld">${fK(presTotal)}</div>
+      ${sobreTotal>0?'<div class="kd" style="color:var(--red)">+'+fmt(sobreTotal)+' sobrecosto</div>':''}
+    </div>
+    <div class="kc">
+      <div class="kl">Pagado a proveedores</div>
+      <div class="kv grn">${fK(pagTotal)}</div>
+      <div class="kd">${pctPag}% del presupuesto</div>
+    </div>
+    <div class="kc">
+      <div class="kl">Por pagar</div>
+      <div class="kv ${disponible<0?'rd':'amb'}">${fK(Math.abs(disponible))}</div>
+      <div class="kd">${disponible<0?'⚠️ Sobrecosto':'Disponible'}</div>
+    </div>
+    <div class="kc">
+      <div class="kl">Partidas</div>
+      <div class="kv">${ps.length}</div>
+      <div class="kd">${ps.filter(function(p){return p.estatus==='completado';}).length} completadas · ${ps.filter(function(p){return p.estatus==='sobrecosto';}).length} con sobrecosto</div>
+    </div>
+  </div>
+
+  <!-- Barra de avance global de pago -->
+  <div class="card" style="padding:12px 16px">
+    <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:6px">
+      <span style="font-weight:700;color:var(--g5)">Avance de pago global</span>
+      <span style="font-weight:800;color:var(--navy)">${pctPag}%</span>
+    </div>
+    <div class="pw" style="height:10px">
+      <div class="pb2 ${semGlobal}" style="width:${Math.min(pctPag,100)}%"></div>
+    </div>
+    ${sobreTotal>0?'<div style="font-size:12px;color:var(--red);margin-top:6px;font-weight:700">⚠️ Sobrecosto acumulado: '+fmt(sobreTotal)+' — Nuevo total real: '+fmt(presTotal+sobreTotal)+'</div>':''}
+  </div>
+
+  <!-- Acciones globales -->
+  <div style="display:flex;gap:8px;flex-wrap:wrap;padding:4px 0">
+    <button class="btn bg bsm" onclick="ppNuevaPartida('${obra.id}')">+ Agregar partida</button>
+    ${ps.length===0 && obra.pid?'<button class="btn bsm" style="background:var(--abg);color:var(--amber);border:1px solid var(--amber)" onclick="ppImportarCot(this.dataset.wid)" data-wid="'+obra.id+'">📄 Importar de cotización</button>':''}
+    <button class="btn bo bsm" onclick="ppExportarResumen('${obra.id}')">📊 Resumen PDF</button>
+  </div>
+
+  ${!ps.length?`
+  <div class="card" style="text-align:center;padding:52px 24px;color:var(--g4)">
+    <div style="font-size:44px;margin-bottom:12px">🏗️</div>
+    <div style="font-size:15px;font-weight:700;color:var(--g5);margin-bottom:6px">Sin partidas de presupuesto</div>
+    <div style="font-size:13px;margin-bottom:20px">Importa las partidas de la cotización aprobada o agrégalas manualmente</div>
+    <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
+      <button class="btn bg" onclick="ppNuevaPartida('${obra.id}')">+ Agregar partida</button>
+      ${obra.pid?'<button class="btn bsm" style="background:var(--abg);color:var(--amber);border:1px solid var(--amber);padding:10px 16px" onclick="ppImportarCot(this.dataset.wid)" data-wid="'+obra.id+'">📄 Importar de cotización aprobada</button>':''}
+    </div>
+  </div>`:
+
+  // TABLA POR RUBROS
+  Object.keys(grupos).map(function(rub){
+    var parts=grupos[rub];
+    var rubPres=parts.reduce(function(s,p){return s+(p.presActual||p.presOrig||0);},0);
+    var rubPag =parts.reduce(function(s,p){return s+(p.pagos||[]).reduce(function(a,x){return a+x.monto;},0);},0);
+    var rubSob =parts.reduce(function(s,p){return s+(p.sobrecostos||[]).reduce(function(a,x){return a+x.monto;},0);},0);
+    var rc=rubColors[rub]||'#4A5568';
+    var rubPctPag=rubPres>0?Math.round(rubPag/rubPres*100):0;
+
+    return '<div class="card" style="padding:0;overflow:hidden;margin-bottom:0">'
+      // Header rubro
+      +'<div style="background:'+rc+';padding:11px 16px;display:flex;align-items:center;gap:12px">'
+        +'<div style="color:#fff;font-size:13px;font-weight:800;flex:1">'+rub+'</div>'
+        +'<div style="color:rgba(255,255,255,.7);font-size:11px">Presup: '+fmt(rubPres)+'</div>'
+        +'<div style="color:#fff;font-size:12px;font-weight:700">Pag: '+fmt(rubPag)+' ('+rubPctPag+'%)</div>'
+        +(rubSob>0?'<div style="background:rgba(255,0,0,.3);color:#fff;padding:2px 8px;border-radius:20px;font-size:11px;font-weight:700">+'+fmt(rubSob)+' sobrecosto</div>':'')
+      +'</div>'
+      // Partidas del rubro
+      +'<table style="width:100%;border-collapse:collapse">'
+        +'<thead><tr style="background:var(--g1)">'
+          +'<th style="padding:9px 14px;text-align:left;font-size:10px;color:var(--g4);font-weight:700;min-width:140px">PARTIDA</th>'
+          +'<th style="padding:9px 10px;text-align:left;font-size:10px;color:var(--g4);font-weight:700;min-width:110px">PROVEEDOR</th>'
+          +'<th style="padding:9px 10px;text-align:right;font-size:10px;color:var(--g4);font-weight:700">PRESUPUESTO</th>'
+          +'<th style="padding:9px 10px;text-align:right;font-size:10px;color:var(--g4);font-weight:700">PAGADO</th>'
+          +'<th style="padding:9px 10px;text-align:right;font-size:10px;color:var(--g4);font-weight:700">PENDIENTE</th>'
+          +'<th style="padding:9px 10px;text-align:center;font-size:10px;color:var(--g4);font-weight:700;min-width:80px">ESTATUS</th>'
+          +'<th style="padding:9px 10px;text-align:center;font-size:10px;color:var(--g4);font-weight:700;width:100px">AVANCE</th>'
+          +'<th style="padding:9px 8px;width:80px"></th>'
+        +'</tr></thead>'
+        +'<tbody>'
+        +parts.map(function(p){
+          var pagado=(p.pagos||[]).reduce(function(a,x){return a+x.monto;},0);
+          var sobrecosto=(p.sobrecostos||[]).reduce(function(a,x){return a+x.monto;},0);
+          var presReal=(p.presActual||p.presOrig||0)+sobrecosto;
+          var pendiente=presReal-pagado;
+          var estColors={pendiente:'var(--g4)',en_proceso:'var(--amber)',completado:'var(--green)',sobrecosto:'var(--red)'};
+          var estIco={pendiente:'⚪',en_proceso:'🟡',completado:'✅',sobrecosto:'🔴'};
+          var est=p.estatus||'pendiente';
+            return '<tr style="border-top:1px solid var(--g1);cursor:pointer" onclick="ppAbrirPartida(\''+obra.id+'\',\''+p.id+'\')">'  
+            +'<td style="padding:10px 14px">'
+              +'<div style="font-size:12px;font-weight:700;color:var(--navy)">'+p.nom+'</div>'
+              +(sobrecosto>0?'<div style="font-size:10px;color:var(--red);font-weight:700;margin-top:1px">⚠️ +'+fmt(sobrecosto)+' sobrecosto</div>':'')
+            +'</td>'
+            +'<td style="padding:5px 6px" onclick="event.stopPropagation()">'
+              +'<input value="'+(p.prov||'')+'" placeholder="Proveedor..." data-wid="'+obra.id+'" data-ppid="'+p.id+'" onblur="ppEditarCampo(this.dataset.wid,this.dataset.ppid,\'prov\',this.value)" style="width:100%;min-width:80px;border:1px solid var(--g2);border-radius:6px;padding:4px 6px;font-size:11px;color:var(--g5);outline:none;background:#fff">'
+            +'</td>'
+            +'<td style="padding:5px 6px;text-align:right" onclick="event.stopPropagation()">'
+              +'<input type="number" value="'+(p.presActual||p.presOrig||0)+'" data-wid="'+obra.id+'" data-ppid="'+p.id+'" onblur="ppEditarCampo(this.dataset.wid,this.dataset.ppid,\'presActual\',parseFloat(this.value)||0)" style="width:76px;border:1px solid var(--g2);border-radius:6px;padding:4px 6px;font-size:12px;font-weight:700;color:var(--navy);text-align:right;outline:none">'
+              +((p.presOrig&&(p.presActual||0)!==p.presOrig)?'<div style="font-size:9px;color:var(--g4);margin-top:1px">Orig: '+fmt(p.presOrig)+'</div>':'')
+            +'<td style="padding:10px 10px;text-align:right"><span class="amt g">'+fmt(pagado)+'</span></td>'
+            +'<td style="padding:10px 10px;text-align:right"><span class="amt '+(pendiente>0?'a':'g')+'">'+fmt(pendiente)+'</span></td>'
+            +'<td style="padding:10px 10px;text-align:center">'
+              +'<span style="font-size:11px;font-weight:700;color:'+estColors[est]+'">'+estIco[est]+' '+est.replace('_',' ')+'</span>'
+            +'</td>'
+            +'<td style="padding:10px 10px">'
+              +'<div style="display:flex;align-items:center;gap:5px">'
+                +'<div class="pw" style="flex:1;height:6px"><div class="pb2 '+(p.avance>=100?'g':p.avance>50?'n':'a')+'" style="width:'+Math.min(p.avance||0,100)+'%"></div></div>'
+                +'<span style="font-size:10px;font-weight:700;color:var(--navy);width:28px">'+(p.avance||0)+'%</span>'
+              +'</div>'
+            +'</td>'
+            +'<td style="padding:10px 6px;text-align:center;white-space:nowrap" onclick="event.stopPropagation()">'
+              +'<button onclick="ppRegistrarPago(\''+obra.id+'\',\''+p.id+'\')" style="background:var(--gbg);color:var(--green);border:1px solid var(--green);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer">+$</button> '
+              +'<button onclick="ppSobrecosto(\''+obra.id+'\',\''+p.id+'\')" style="background:var(--rbg);color:var(--red);border:1px solid var(--red);border-radius:6px;padding:4px 8px;font-size:11px;font-weight:700;cursor:pointer">⚠️</button>'
+            +'</td>'
+          +'</tr>';}).join('')
+        +'</tbody>'
+      +'</table>'
+    +'</div>';
+  }).join('')}`;
+}
+
+// ─── EDICIÓN INLINE de proveedor y presupuesto ───────────────────────────────
+function ppEditarCampo(wid, ppid, campo, valor){
+  if(!DB.presupuestos||!DB.presupuestos[wid]) return;
+  var p = DB.presupuestos[wid].find(function(x){ return x.id===ppid; });
+  if(!p) return;
+  if(campo==='presActual'){
+    var v = parseFloat(valor)||0;
+    if(v<=0) return;
+    p.presActual = v;
+  } else if(campo==='prov'){
+    p.prov = (valor||'').trim();
+    if(p.prov && p.estatus==='pendiente') p.estatus='en_proceso';
+  }
+  saveToStorage();
+  // Actualizar los KPIs sin re-renderizar toda la tabla
+  var obra = DB.works.find(function(w){ return w.id===wid; });
+  if(obra){
+    var ps = DB.presupuestos[wid]||[];
+    var presTotal = ps.reduce(function(s,x){ return s+(x.presActual||x.presOrig||0); },0);
+    var pagTotal  = ps.reduce(function(s,x){ return s+(x.pagos||[]).reduce(function(a,pg){ return a+pg.monto; },0); },0);
+    var sobreTotal= ps.reduce(function(s,x){ return s+(x.sobrecostos||[]).reduce(function(a,sc){ return a+sc.monto; },0); },0);
+    // Actualizar KPI cards si están visibles
+    var kpis = document.querySelectorAll('.kv');
+    // Re-render solo si hay valores cambiados significativos
+  }
+}
+
+
+// ─── NUEVO / IMPORTAR ─────────────────────────────────────────────────────────
+function ppImportarCot(wid){
+  var obra=DB.works.find(function(w){return w.id===wid;});
+  if(!obra)return;
+  var cot=DB.quotations.find(function(q){return q.pid===obra.pid&&q.status==='APROBADA'&&q.partidas&&q.partidas.length;});
+  if(!cot){toast('⚠️ No hay cotización aprobada con partidas');return;}
+  if(!DB.presupuestos)DB.presupuestos={};
+  DB.presupuestos[wid]=(cot.partidas).map(function(pt,i){
+    return {id:'PP-'+Date.now()+'-'+i,rub:pt.cat||pt.rub||'GENERAL',nom:pt.nom||pt.concepto||'Partida '+(i+1),prov:'',presOrig:pt.sub||Math.round((pt.cant||1)*(pt.pu||0)),presActual:pt.sub||Math.round((pt.cant||1)*(pt.pu||0)),avance:0,estatus:'pendiente',pagos:[],sobrecostos:[],notas:''};
+  });
+  saveToStorage();
+  window._obraTab='presupuesto';
+  rObras();
+  toast('✅ '+cot.partidas.length+' partidas importadas como presupuesto');
+}
+
+function ppNuevaPartida(wid){
+  om('➕ Nueva partida de presupuesto',`
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div><div class="fl">Nombre de la partida *</div><input id="pp_nom" class="fi" placeholder="ej. Herrero, Albañilería, Materiales..."></div>
+      <div class="fr2">
+        <div><div class="fl">Rubro</div>
+          <select id="pp_rub" class="fsl">
+            <option>OBRA GRIS</option><option>ACABADOS</option><option>INSTALACIONES</option>
+            <option>HERRERÍA</option><option>DISEÑO</option><option>INDIRECTOS</option><option>GENERAL</option>
+          </select>
+        </div>
+        <div><div class="fl">Presupuesto ($) *</div><input id="pp_pres" class="fi" type="number" placeholder="0"></div>
+      </div>
+      <div><div class="fl">Proveedor asignado (opcional)</div>
+        <input id="pp_prov" class="fi" list="pp_prov_list" placeholder="Nombre del proveedor o empresa...">
+        <datalist id="pp_prov_list">
+          ${DB.suppliers.map(function(s){return '<option value="'+s.name+'">';}).join('')}
+        </datalist>
+      </div>
+    </div>`,
+    `<button class="btn" onclick="cm()" style="background:var(--g2);color:var(--g5)">Cancelar</button>
+     <button class="btn bp" onclick="ppGuardarPartida('${wid}')">Agregar</button>`);
+  setTimeout(function(){var e=document.getElementById('pp_nom');if(e)e.focus();},100);
+}
+
+function ppGuardarPartida(wid){
+  var nom=(document.getElementById('pp_nom')||{}).value.trim();
+  var pres=parseFloat((document.getElementById('pp_pres')||{}).value)||0;
+  if(!nom||!pres){toast('⚠️ Completa nombre y presupuesto');return;}
+  if(!DB.presupuestos)DB.presupuestos={};
+  if(!DB.presupuestos[wid])DB.presupuestos[wid]=[];
+  DB.presupuestos[wid].push({
+    id:'PP-'+Date.now(), nom:nom,
+    rub:(document.getElementById('pp_rub')||{}).value||'GENERAL',
+    prov:(document.getElementById('pp_prov')||{}).value.trim(),
+    presOrig:pres, presActual:pres,
+    avance:0, estatus:'pendiente', pagos:[], sobrecostos:[], notas:''
+  });
+  cm();saveToStorage();window._obraTab='presupuesto';rObras();toast('✅ Partida agregada');
+}
+
+// ─── ABRIR DETALLE DE PARTIDA ─────────────────────────────────────────────────
+function ppAbrirPartida(wid, ppid){
+  if(!DB.presupuestos||!DB.presupuestos[wid])return;
+  var p=DB.presupuestos[wid].find(function(x){return x.id===ppid;});
+  if(!p)return;
+  var pagado=(p.pagos||[]).reduce(function(a,x){return a+x.monto;},0);
+  var sobrecosto=(p.sobrecostos||[]).reduce(function(a,x){return a+x.monto;},0);
+  var presReal=(p.presActual||p.presOrig||0)+sobrecosto;
+  var pendiente=presReal-pagado;
+  var pct=presReal>0?Math.round(pagado/presReal*100):0;
+
+  om('🏗️ '+p.nom,`
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <!-- KPIs -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px">
+        <div style="background:var(--g1);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:10px;color:var(--g4);font-weight:700">PRESUPUESTO</div>
+          <div style="font-size:16px;font-weight:800;color:var(--navy)">${fmt(presReal)}</div>
+          ${sobrecosto>0?'<div style="font-size:10px;color:var(--red)">+'+fmt(sobrecosto)+' sobrecosto</div>':''}
+        </div>
+        <div style="background:var(--gbg);border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:10px;color:var(--green);font-weight:700">PAGADO</div>
+          <div style="font-size:16px;font-weight:800;color:var(--green)">${fmt(pagado)}</div>
+        </div>
+        <div style="background:${pendiente<0?'var(--rbg)':'var(--abg)'};border-radius:8px;padding:10px;text-align:center">
+          <div style="font-size:10px;color:${pendiente<0?'var(--red)':'var(--amber)'};font-weight:700">PENDIENTE</div>
+          <div style="font-size:16px;font-weight:800;color:${pendiente<0?'var(--red)':'var(--amber)'}">${fmt(Math.abs(pendiente))}</div>
+        </div>
+      </div>
+      <!-- Barra pago -->
+      <div>
+        <div class="pw" style="height:8px"><div class="pb2 ${pct>=100?'g':'n'}" style="width:${Math.min(pct,100)}%"></div></div>
+        <div style="font-size:11px;color:var(--g4);margin-top:3px">${pct}% pagado</div>
+      </div>
+      <!-- Proveedor y avance -->
+      <div class="fr2">
+        <div><div class="fl">Proveedor</div>
+          <input id="ppd_prov" class="fi" value="${p.prov||''}" placeholder="Nombre o empresa..." list="ppd_prov_list">
+          <datalist id="ppd_prov_list">${DB.suppliers.map(function(s){return '<option value="'+s.name+'">';}).join('')}</datalist>
+        </div>
+        <div><div class="fl">% Avance físico</div>
+          <input id="ppd_av" class="fi" type="number" min="0" max="100" value="${p.avance||0}">
+        </div>
+      </div>
+      <!-- Estatus -->
+      <div><div class="fl">Estatus</div>
+        <select id="ppd_est" class="fsl">
+          <option value="pendiente" ${p.estatus==='pendiente'?'selected':''}>⚪ Pendiente</option>
+          <option value="en_proceso" ${p.estatus==='en_proceso'?'selected':''}>🟡 En proceso</option>
+          <option value="completado" ${p.estatus==='completado'?'selected':''}>✅ Completado</option>
+          <option value="sobrecosto" ${p.estatus==='sobrecosto'?'selected':''}>🔴 Con sobrecosto</option>
+        </select>
+      </div>
+      <!-- Historial de pagos -->
+      ${(p.pagos||[]).length?'<div><div class="fl">Pagos registrados</div>'
+        +(p.pagos||[]).map(function(pg,i){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--gbg);border-radius:6px;margin-bottom:4px;font-size:12px">'
+          +'<div><strong>'+fmt(pg.monto)+'</strong> · '+pg.concepto+'<div style="font-size:10px;color:var(--g4)">'+pg.fecha+'</div></div>'
+          +'<button data-wid="'+wid+'" data-ppid="'+ppid+'" data-idx="'+i+'" onclick="ppEliminarPago(this.dataset.wid,this.dataset.ppid,parseInt(this.dataset.idx))" style="background:none;border:none;cursor:pointer;color:var(--g3);font-size:14px">✕</button>'
+          +'</div>';}).join('')
+        +'</div>':''}
+      <!-- Sobrecostos -->
+      ${(p.sobrecostos||[]).length?'<div><div class="fl" style="color:var(--red)">Sobrecostos</div>'
+        +(p.sobrecostos||[]).map(function(sc,i){return '<div style="display:flex;justify-content:space-between;align-items:center;padding:6px 10px;background:var(--rbg);border-radius:6px;margin-bottom:4px;font-size:12px">'
+          +'<div><strong style="color:var(--red)">+'+fmt(sc.monto)+'</strong> · '+sc.motivo+'<div style="font-size:10px;color:var(--g4)">'+sc.fecha+'</div></div>'
+          +'<button data-wid="'+wid+'" data-ppid="'+ppid+'" data-idx="'+i+'" onclick="ppEliminarSobrecosto(this.dataset.wid,this.dataset.ppid,parseInt(this.dataset.idx))" style="background:none;border:none;cursor:pointer;color:var(--g3);font-size:14px">✕</button>'
+          +'</div>';}).join('')
+        +'</div>':''}
+      <!-- Notas -->
+      <div><div class="fl">Notas</div><textarea id="ppd_notas" class="fta" style="min-height:60px">${p.notas||''}</textarea></div>
+    </div>`,
+    `<button class="btn" onclick="cm()" style="background:var(--g2);color:var(--g5)">Cerrar</button>
+     <button class="btn bsm" style="background:var(--gbg);color:var(--green);border:1px solid var(--green)" onclick="ppRegistrarPago('${wid}','${ppid}')">+$ Pago</button>
+     <button class="btn bsm" style="background:var(--rbg);color:var(--red);border:1px solid var(--red)" onclick="ppSobrecosto('${wid}','${ppid}')">⚠️ Sobrecosto</button>
+     <button class="btn bp" onclick="ppGuardarDetalle('${wid}','${ppid}')">💾 Guardar</button>`);
+}
+
+function ppGuardarDetalle(wid,ppid){
+  var p=DB.presupuestos[wid].find(function(x){return x.id===ppid;});if(!p)return;
+  p.prov=(document.getElementById('ppd_prov')||{}).value.trim();
+  p.avance=Math.min(100,Math.max(0,parseInt((document.getElementById('ppd_av')||{}).value)||0));
+  p.estatus=(document.getElementById('ppd_est')||{}).value||'pendiente';
+  p.notas=(document.getElementById('ppd_notas')||{}).value.trim();
+  // Auto-marcar completado si avance=100
+  if(p.avance===100&&p.estatus==='en_proceso') p.estatus='completado';
+  cm();saveToStorage();window._obraTab='presupuesto';rObras();toast('✅ Guardado');
+}
+
+// ─── REGISTRAR PAGO A PROVEEDOR ───────────────────────────────────────────────
+function ppRegistrarPago(wid,ppid){
+  var obra=DB.works.find(function(w){return w.id===wid;});
+  var p=DB.presupuestos[wid]&&DB.presupuestos[wid].find(function(x){return x.id===ppid;});
+  if(!p)return;
+  var pagado=(p.pagos||[]).reduce(function(a,x){return a+x.monto;},0);
+  var sobrecosto=(p.sobrecostos||[]).reduce(function(a,x){return a+x.monto;},0);
+  var presReal=(p.presActual||p.presOrig||0)+sobrecosto;
+  var pendiente=Math.max(0,presReal-pagado);
+
+  om('💵 Registrar pago — '+p.nom,`
+    <div style="background:var(--g1);border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12px">
+      <div style="display:flex;justify-content:space-between">
+        <span>Proveedor: <strong>${p.prov||'Sin asignar'}</strong></span>
+        <span>Pendiente: <strong style="color:var(--amber)">${fmt(pendiente)}</strong></span>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div class="fr2">
+        <div><div class="fl" style="font-weight:800;color:var(--green)">MONTO REAL PAGADO *</div>
+          <input id="ppag_m" class="fi" type="number" placeholder="0" style="font-size:18px;font-weight:800;color:var(--green)" value="${pendiente||''}">
+        </div>
+        <div><div class="fl">Forma de pago</div>
+          <select id="ppag_forma" class="fsl">
+            <option value="efectivo">💵 Efectivo</option>
+            <option value="transferencia">🏦 Transferencia</option>
+            <option value="cheque">📝 Cheque</option>
+          </select>
+        </div>
+      </div>
+      <div><div class="fl">Concepto</div>
+        <input id="ppag_con" class="fi" value="${p.nom}" placeholder="Detalle del pago...">
+      </div>
+      <div class="fr2">
+        <div><div class="fl">Fecha</div><input id="ppag_fec" class="fi" type="date" value="${today()}"></div>
+        <div><div class="fl">Referencia / Folio</div><input id="ppag_ref" class="fi" placeholder="Factura, transferencia..."></div>
+      </div>
+    </div>`,
+    `<button class="btn" onclick="cm()" style="background:var(--g2);color:var(--g5)">Cancelar</button>
+     <button class="btn bp" onclick="ppConfirmarPago('${wid}','${ppid}',false)">💾 Solo guardar</button>
+     <button class="btn bg" onclick="ppConfirmarPago('${wid}','${ppid}',true)">🧾 Guardar + Recibo</button>`);
+  setTimeout(function(){var e=document.getElementById('ppag_m');if(e)e.focus();},100);
+}
+
+function ppConfirmarPago(wid,ppid,conRecibo){
+  var monto=parseFloat((document.getElementById('ppag_m')||{}).value)||0;
+  var concepto=(document.getElementById('ppag_con')||{}).value.trim();
+  var fecha=(document.getElementById('ppag_fec')||{}).value||today();
+  var forma=(document.getElementById('ppag_forma')||{}).value||'efectivo';
+  var ref=(document.getElementById('ppag_ref')||{}).value.trim();
+  if(!monto){toast('⚠️ Ingresa el monto');return;}
+
+  var p=DB.presupuestos[wid].find(function(x){return x.id===ppid;});
+  if(!p)return;
+  if(!p.pagos)p.pagos=[];
+
+  var pago={monto:monto,concepto:concepto,fecha:fecha,forma:forma,ref:ref};
+  p.pagos.push(pago);
+
+  // Actualizar estatus automático
+  var totalPag=(p.pagos).reduce(function(a,x){return a+x.monto;},0);
+  var presReal=(p.presActual||p.presOrig||0)+(p.sobrecostos||[]).reduce(function(a,x){return a+x.monto;},0);
+  if(totalPag>=presReal) p.estatus='completado';
+  else if(totalPag>0) p.estatus='en_proceso';
+
+  // Registrar en DB.expenses para que aparezca en Finanzas
+  var obra=DB.works.find(function(w){return w.id===wid;});
+  if(obra){
+    DB.expenses.push({id:DB.expenses.length+1,pid:obra.pid||null,cat:concepto,sid:null,amount:monto,date:fecha,nota:ref});
+    if(obra.pid){var pr=gP(obra.pid);if(pr)pr.gast=(pr.gast||0)+monto;}
+    obra.spent=(obra.spent||0)+monto;
+  }
+
+  // Recibo si aplica
+  if(conRecibo){
+    if(!DB.pagos)DB.pagos=[];
+    var folio='REC-'+new Date().getFullYear()+'-'+String(DB.pagos.length+1).padStart(3,'0');
+    var pagoRec={folio:folio,fecha:fecha,pid:obra?obra.pid:null,cid:obra&&gP(obra.pid)?gP(obra.pid).cid:null,concepto:concepto+' · '+p.nom,monto:monto,forma:forma,ref:ref,estNum:null,uid:DB.user?DB.user.id:1};
+    DB.pagos.push(pagoRec);
+    cm();saveToStorage();window._obraTab='presupuesto';rObras();
+    finOfrecerRecibo(pagoRec);
+  } else {
+    cm();saveToStorage();window._obraTab='presupuesto';rObras();
+    toast('✅ Pago de '+fmt(monto)+' registrado a '+p.nom);
+  }
+}
+
+// ─── SOBRECOSTO ────────────────────────────────────────────────────────────────
+function ppSobrecosto(wid,ppid){
+  var p=DB.presupuestos[wid]&&DB.presupuestos[wid].find(function(x){return x.id===ppid;});
+  if(!p)return;
+  var presOrig=p.presActual||p.presOrig||0;
+  var scAcum=(p.sobrecostos||[]).reduce(function(a,x){return a+x.monto;},0);
+
+  om('⚠️ Registrar sobrecosto — '+p.nom,`
+    <div style="background:var(--rbg);border:1px solid var(--red);border-radius:8px;padding:12px;margin-bottom:12px">
+      <div style="font-size:12px;font-weight:700;color:var(--red);margin-bottom:4px">⚠️ ¿Qué es un sobrecosto?</div>
+      <div style="font-size:12px;color:var(--g5)">Cuando el proveedor cobra más de lo cotizado. El monto original queda como referencia y se agrega el excedente real.</div>
+    </div>
+    <div style="background:var(--g1);border-radius:8px;padding:10px;margin-bottom:12px;font-size:12px">
+      <div style="display:flex;justify-content:space-between">
+        <span>Presupuesto original:</span><strong>${fmt(presOrig)}</strong>
+      </div>
+      ${scAcum>0?'<div style="display:flex;justify-content:space-between;color:var(--red)"><span>Sobrecosto anterior:</span><strong>+'+fmt(scAcum)+'</strong></div>':''}
+      <div style="display:flex;justify-content:space-between;font-weight:800;margin-top:4px;border-top:1px solid var(--g2);padding-top:4px">
+        <span>Total actual:</span><strong>${fmt(presOrig+scAcum)}</strong>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div><div class="fl" style="color:var(--red);font-weight:800">MONTO DE SOBRECOSTO *</div>
+        <input id="psc_m" class="fi" type="number" placeholder="Cuánto más del presupuesto" style="font-size:18px;font-weight:800;color:var(--red)">
+      </div>
+      <div><div class="fl">Motivo del sobrecosto *</div>
+        <input id="psc_mot" class="fi" list="psc_motivos" placeholder="ej. Detalles adicionales, cambio de diseño, material más caro...">
+        <datalist id="psc_motivos">
+          <option value="Detalles adicionales no contemplados">
+          <option value="Cambio de diseño en obra">
+          <option value="Material más caro de lo cotizado">
+          <option value="Trabajo extra solicitado por cliente">
+          <option value="Error en cotización original">
+          <option value="Ajuste por condiciones de terreno">
+        </datalist>
+      </div>
+      <div class="fr2">
+        <div><div class="fl">Fecha</div><input id="psc_fec" class="fi" type="date" value="${today()}"></div>
+        <div><div class="fl">¿Requiere autorización?</div>
+          <select id="psc_auth" class="fsl">
+            <option value="si">Sí — enviar a Miguel</option>
+            <option value="no">No — registrar directo</option>
+          </select>
+        </div>
+      </div>
+    </div>`,
+    `<button class="btn" onclick="cm()" style="background:var(--g2);color:var(--g5)">Cancelar</button>
+     <button class="btn bsm" style="background:var(--rbg);color:var(--red);border:1px solid var(--red)" onclick="ppConfirmarSobrecosto('${wid}','${ppid}')">⚠️ Registrar sobrecosto</button>`);
+  setTimeout(function(){var e=document.getElementById('psc_m');if(e)e.focus();},100);
+}
+
+function ppConfirmarSobrecosto(wid,ppid){
+  var monto=parseFloat((document.getElementById('psc_m')||{}).value)||0;
+  var motivo=(document.getElementById('psc_mot')||{}).value.trim();
+  var fecha=(document.getElementById('psc_fec')||{}).value||today();
+  var auth=(document.getElementById('psc_auth')||{}).value;
+  if(!monto||!motivo){toast('⚠️ Ingresa monto y motivo');return;}
+
+  var p=DB.presupuestos[wid].find(function(x){return x.id===ppid;});
+  if(!p)return;
+  if(!p.sobrecostos)p.sobrecostos=[];
+  p.sobrecostos.push({monto:monto,motivo:motivo,fecha:fecha,auth:auth,uid:DB.user?DB.user.id:1});
+  p.estatus='sobrecosto';
+
+  // Enviar a autorizaciones si se requiere
+  if(auth==='si'){
+    if(!DB.preauth)DB.preauth=[];
+    var obra=DB.works.find(function(w){return w.id===wid;});
+    DB.preauth.push({
+      id:DB.preauth.length+1,tipo:'egreso',
+      concepto:'SOBRECOSTO: '+p.nom+' — '+motivo,
+      monto:monto,pid:obra?obra.pid:null,
+      uid:DB.user?DB.user.id:1,fecha:fecha,status:'pendiente',
+      nota:'Partida: '+p.nom+' · '+p.rub
+    });
+    actualizarAuthBadge();
+    toast('⚠️ Sobrecosto enviado a Autorizaciones · Miguel lo revisará');
+  } else {
+    toast('⚠️ Sobrecosto de '+fmt(monto)+' registrado en '+p.nom);
+  }
+
+  cm();saveToStorage();window._obraTab='presupuesto';rObras();
+}
+
+function ppEliminarPago(wid,ppid,idx){
+  if(!confirm('¿Eliminar este pago?'))return;
+  var p=DB.presupuestos[wid].find(function(x){return x.id===ppid;});
+  if(!p||!p.pagos)return;
+  p.pagos.splice(idx,1);
+  var totalPag=(p.pagos).reduce(function(a,x){return a+x.monto;},0);
+  if(totalPag===0) p.estatus='pendiente';
+  else p.estatus='en_proceso';
+  cm();saveToStorage();window._obraTab='presupuesto';rObras();toast('🗑️ Pago eliminado');
+}
+
+function ppEliminarSobrecosto(wid,ppid,idx){
+  if(!confirm('¿Eliminar este sobrecosto?'))return;
+  var p=DB.presupuestos[wid].find(function(x){return x.id===ppid;});
+  if(!p||!p.sobrecostos)return;
+  p.sobrecostos.splice(idx,1);
+  if(!p.sobrecostos.length) p.estatus='en_proceso';
+  cm();saveToStorage();window._obraTab='presupuesto';rObras();toast('🗑️ Sobrecosto eliminado');
+}
+
+function ppExportarResumen(wid){
+  toast('📊 Resumen próximamente — usa la vista de partidas por ahora');
 }
 
 
@@ -2692,7 +3230,7 @@ function obraHtmlPartidas(w){
   <div style="text-align:right;margin-bottom:4px">
     <button class="btn bp bsm" onclick="abrirAgregarPartida('${w.id}')">+ Partida</button>
   </div>
-  ${Object.entries(grupos).map(function([rub,parts]){
+  ${Object.entries(grupos).map(function(__e){var rub=__e[0],parts=__e[1];
     var rPres=parts.reduce(function(s,p){return s+p.pres;},0);
     var rGast=parts.reduce(function(s,p){return s+p.gast;},0);
     var rc=rubColors[rub]||'#4A5568';
@@ -2897,7 +3435,7 @@ function obaSemaforo(wid){
   var w=DB.works.find(x=>x.id===wid);if(!w)return;
   om('Cambiar semáforo — '+w.name,`
     <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
-      ${[['green','🟢 En tiempo'],['amber','🟡 En revisión'],['red','🔴 En riesgo'],['blue','🔵 Cotizando']].map(function([k,v]){
+      ${[['green','🟢 En tiempo'],['amber','🟡 En revisión'],['red','🔴 En riesgo'],['blue','🔵 Cotizando']].map(function(__e){var k=__e[0],v=__e[1];
         return '<button onclick="setSemaforo(\''+wid+'\',\''+k+'\')" style="padding:14px;border:2px solid '+(w.sem===k?'var(--navy)':'var(--g2)')+';border-radius:10px;background:'+(w.sem===k?'var(--g1)':'#fff')+';font-size:14px;font-weight:700;cursor:pointer">'+v+'</button>';
       }).join('')}
     </div>`,'<button class="btn bo" onclick="cm()">Cerrar</button>');
@@ -4362,7 +4900,7 @@ function rAutorizaciones(){
     ${[
       ['proyectos','📋 Proyectos','Aprobación de cotizaciones y creación de obra', cotPend.length + cotAprobSinObra.length],
       ['movimientos','💰 Movimientos','Ingresos y egresos pendientes', movPend.length],
-    ].map(function([t,l,d,n]){var act=t===tab;return `
+    ].map(function(__e){var t=__e[0],l=__e[1],d=__e[2],n=__e[3];var act=t===tab;return `
       <button onclick="authTab('${t}')" style="flex:1;padding:9px 12px;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;background:${act?'var(--navy)':'transparent'};color:${act?'#fff':'var(--g4)'};text-align:left">
         ${l} ${n>0?'<span style="background:var(--gold);color:#fff;padding:1px 7px;border-radius:10px;font-size:11px;margin-left:6px">'+n+'</span>':''}
       </button>`}).join('')}
@@ -4773,6 +5311,7 @@ function saveToStorage(){
       legal: DB.legal || [],
       pagos: DB.pagos || [],
       gantt: DB.gantt || {},
+      presupuestos: DB.presupuestos || {},
     };
     localStorage.setItem('vaarq_db', JSON.stringify(data));
     _lastSave = new Date();
@@ -4797,7 +5336,7 @@ function loadFromStorage(){
     // Restaurar cada colección
     var campos = ['prospects','clients','projects','quotations','works','logs','revenues',
       'expenses','purchases','suppliers','documents','caja','calendarios','proyecciones',
-      'preauth','destajos','planplanos','personal','legal','gantt','pagos'];
+      'preauth','destajos','planplanos','personal','legal','gantt','pagos','presupuestos'];
     campos.forEach(function(c){
       if(data[c] !== undefined) DB[c] = data[c];
     });
@@ -4842,8 +5381,8 @@ var ecReport = []; // resultado comparativo
 function rEstadoCuenta(){
   $('MN').innerHTML=`
   <div class="ph3">
-    <div><div class="pt">🏦 Estado de Cuenta</div>
-    <div class="ps">Carga tu Excel bancario y compara contra lo registrado en el ERP</div></div>
+    <div><div class="pt">🏦 Conciliación Bancaria</div>
+    <div class="ps">Sube tu estado de cuenta bancario y compara contra el ERP</div></div>
   </div>
 
   <!-- UPLOAD ZONE -->
@@ -6250,7 +6789,7 @@ function epRenderDisc(d){
       <button class="btn bsm" style="background:var(--rbg);color:var(--red);border:1px solid var(--red)" onclick="epEliminarDisc('${d.id}')">🗑️</button>
     </div>
     <div style="display:flex;gap:10px;padding:8px 16px;background:var(--g1);flex-wrap:wrap">
-      ${Object.entries(EP_EST).map(function([k,v]){return '<span style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:'+v.color+'"><span style="width:8px;height:8px;border-radius:50%;background:'+v.dot+';display:inline-block"></span>'+v.label+'</span>';}).join('')}
+      ${Object.entries(EP_EST).map(function(__e){var k=__e[0],v=__e[1];return '<span style="display:flex;align-items:center;gap:4px;font-size:11px;font-weight:600;color:'+v.color+'"><span style="width:8px;height:8px;border-radius:50%;background:'+v.dot+';display:inline-block"></span>'+v.label+'</span>';}).join('')}
     </div>
     <div class="tw" style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;min-width:480px">
       <thead><tr style="background:var(--g1)">
@@ -6266,7 +6805,7 @@ function epRenderDisc(d){
           +'<td style="padding:9px 14px;font-size:13px;font-weight:600;color:var(--g5)">'+p.nombre+'</td>'
           +'<td style="padding:9px 14px;text-align:center">'
             +'<select onchange="epCambiarEst(\''+d.id+'\','+i+',this.value)" style="padding:4px 8px;border:1.5px solid '+e.color+'33;border-radius:20px;font-size:11px;font-weight:700;color:'+e.color+';background:'+e.bg+';width:110px">'
-            +Object.entries(EP_EST).map(function([k,v]){return '<option value="'+k+'"'+(k===p.estatus?' selected':'')+'>'+v.label+'</option>';}).join('')
+            +Object.entries(EP_EST).map(function(__e){var k=__e[0],v=__e[1];return '<option value="'+k+'"'+(k===p.estatus?' selected':'')+'>'+v.label+'</option>';}).join('')
             +'</select></td>'
           +'<td style="padding:9px 14px;text-align:center">'
             +'<select onchange="epCambiarSem(\''+d.id+'\','+i+',this.value)" style="padding:4px 8px;border:1px solid var(--g2);border-radius:8px;font-size:12px;font-weight:700;color:var(--navy);background:#fff;width:66px">'
@@ -6296,7 +6835,7 @@ function epAgregarPlano(did){
     <div style="display:flex;flex-direction:column;gap:12px">
       <div><div class="fl">Nombre del plano *</div><input id="ep_np_nombre" class="fi" placeholder="ej. Planta Tipo, Corte A..."></div>
       <div class="fr2">
-        <div><div class="fl">Estatus</div><select id="ep_np_est" class="fsl">${Object.entries(EP_EST).map(function([k,v]){return '<option value="'+k+'">'+v.label+'</option>';}).join('')}</select></div>
+        <div><div class="fl">Estatus</div><select id="ep_np_est" class="fsl">${Object.entries(EP_EST).map(function(__e){var k=__e[0],v=__e[1];return '<option value="'+k+'">'+v.label+'</option>';}).join('')}</select></div>
         <div><div class="fl">Semana</div><select id="ep_np_sem" class="fsl">${[1,2,3,4,5,6,7,8,9,10,11,12].map(function(n){return '<option value="'+n+'">Sem. '+n+'</option>';}).join('')}</select></div>
       </div>
     </div>`,
@@ -7040,11 +7579,22 @@ document.addEventListener('DOMContentLoaded', function() {
         style="padding:6px 10px;border:1px solid var(--g2);border-radius:8px;font-size:11px;cursor:pointer;background:var(--g1);font-weight:600">↺</button>
     </div>
 
+    <!-- FORMA DE PAGO (solo ingresos) -->
+    <div id="fin-forma-wrap" style="display:none">
+      <select id="fin-forma"
+        style="width:100%;padding:10px 12px;border:2px solid var(--g2);border-radius:10px;font-size:13px;background:#fff;outline:none">
+        <option value="efectivo">💵 Efectivo</option>
+        <option value="transferencia">🏦 Transferencia</option>
+        <option value="cheque">📝 Cheque</option>
+        <option value="tarjeta">💳 Tarjeta bancaria</option>
+      </select>
+    </div>
+
     <!-- GUARDAR -->
-    <button id="fin-guardar-btn" onclick="finEnviarAuth()"
+    <button id="fin-guardar-btn" onclick="finGuardarSmart()"
       style="width:100%;padding:13px;border:none;border-radius:10px;background:var(--green);color:#fff;font-size:15px;font-weight:800;cursor:pointer;transition:.15s"
       onmouseover="this.style.opacity='.88'" onmouseout="this.style.opacity='1'">
-      📤 Enviar para autorización
+      💾 Guardar ingreso + Recibo
     </button>
   </div>
 </div>
@@ -7227,16 +7777,22 @@ function finSetTipo(tipo){
   var bEgr = document.getElementById('fin-btn-egr');
   var btn  = document.getElementById('fin-guardar-btn');
   var monto = document.getElementById('fin-monto');
+  var formaWrap = document.getElementById('fin-forma-wrap');
   if(tipo === 'ingreso'){
     bIng.className = 'fin-tipo-btn ing';
     bEgr.className = 'fin-tipo-btn';
     btn.style.background = 'var(--green)';
-    btn.textContent = '✅ Guardar ingreso';
+    btn.textContent = '💾 Guardar + Recibo';
+    btn.onclick = finGuardarSmart;
     monto.style.color = 'var(--green)';
+    if(formaWrap) formaWrap.style.display='block';
   } else {
     bEgr.className = 'fin-tipo-btn egr';
     bIng.className = 'fin-tipo-btn';
     btn.style.background = 'var(--red)';
+    btn.textContent = '📤 Enviar a autorizaciones';
+    btn.onclick = finEnviarAuth;
+    if(formaWrap) formaWrap.style.display='none';
     btn.textContent = '✅ Guardar egreso';
     monto.style.color = 'var(--red)';
   }
@@ -7252,17 +7808,30 @@ function finGuardar(){
   if(!concepto){ toast('⚠️ Escribe el concepto'); document.getElementById('fin-concepto').focus(); return; }
 
   if(finTipo === 'ingreso'){
-    DB.revenues.push({
-      id: DB.revenues.length+1,
-      pid: pid||null,
-      type: concepto,
-      amount: monto,
-      date: fecha,
-      ref: ''
-    });
+    var revId = DB.revenues.length+1;
+    DB.revenues.push({id:revId, pid:pid||null, type:concepto, amount:monto, date:fecha, ref:''});
     // Actualizar cobrado del proyecto
-    if(pid){ var p=gP(pid); if(p) p.cob=(p.cob||0)+monto; }
-    toast('✅ Ingreso registrado — '+fmt(monto));
+    if(pid){ var p2=gP(pid); if(p2) p2.cob=(p2.cob||0)+monto; }
+    // También registrar en DB.pagos para poder generar recibo
+    if(!DB.pagos) DB.pagos=[];
+    var folioNum = DB.pagos.length+1;
+    var folio = 'REC-'+new Date().getFullYear()+'-'+String(folioNum).padStart(3,'0');
+    var forma = (document.getElementById('fin-forma')||{}).value || 'efectivo';
+    var pagoObj = {
+      folio:folio, fecha:fecha, pid:pid||null,
+      cid: pid&&gP(pid)?gP(pid).cid:null,
+      concepto:concepto, monto:monto, forma:forma,
+      ref:'', estNum:null, uid:DB.user?DB.user.id:1
+    };
+    DB.pagos.push(pagoObj);
+    saveToStorage();
+    // Cerrar panel
+    document.getElementById('fin-panel').classList.remove('open');
+    if(document.querySelector('.nv.act[data-p="finanzas"]')) rFin();
+    if(document.querySelector('.nv.act[data-p="dashboard"]')) rDash();
+    // Ofrecer recibo inmediatamente
+    finOfrecerRecibo(pagoObj, folio);
+    return;
   } else {
     DB.expenses.push({
       id: DB.expenses.length+1,
@@ -7278,13 +7847,70 @@ function finGuardar(){
     toast('✅ Egreso registrado — '+fmt(monto));
   }
 
-  // Cerrar panel y refrescar si estamos en finanzas
+  // Cerrar panel y refrescar (solo egresos llegan aquí)
   document.getElementById('fin-panel').classList.remove('open');
+  saveToStorage();
   if(document.querySelector('.nv.act[data-p="finanzas"]')) rFin();
   if(document.querySelector('.nv.act[data-p="dashboard"]')) rDash();
+  toast('✅ Egreso registrado — '+fmt(monto));
 }
 
 // Mostrar el FAB solo cuando el usuario está logueado
+// ─── Ingreso directo: guarda y ofrece recibo ─────────────────────────────────
+function finGuardarSmart(){
+  var monto   = parseFloat(document.getElementById('fin-monto').value)||0;
+  var concepto= document.getElementById('fin-concepto').value.trim();
+  var pid     = document.getElementById('fin-proyecto').value;
+  var fecha   = document.getElementById('fin-fecha').value || today();
+  var forma   = (document.getElementById('fin-forma')||{}).value || 'efectivo';
+
+  if(!monto){ toast('⚠️ Escribe el monto'); document.getElementById('fin-monto').focus(); return; }
+  if(!concepto){ toast('⚠️ Escribe el concepto'); document.getElementById('fin-concepto').focus(); return; }
+
+  // Guardar en revenues
+  DB.revenues.push({id:DB.revenues.length+1, pid:pid||null, type:concepto, amount:monto, date:fecha, ref:''});
+  if(pid){ var pp=gP(pid); if(pp) pp.cob=(pp.cob||0)+monto; }
+
+  // Guardar en pagos para recibo
+  if(!DB.pagos) DB.pagos=[];
+  var folioNum = DB.pagos.length+1;
+  var folio = 'REC-'+new Date().getFullYear()+'-'+String(folioNum).padStart(3,'0');
+  var cid = pid&&gP(pid)?gP(pid).cid:null;
+  var pago = {folio:folio, fecha:fecha, pid:pid||null, cid:cid, concepto:concepto, monto:monto, forma:forma, ref:'', estNum:null, uid:DB.user?DB.user.id:1};
+  DB.pagos.push(pago);
+  saveToStorage();
+
+  // Cerrar FAB
+  document.getElementById('fin-panel').classList.remove('open');
+  if(document.querySelector('.nv.act[data-p="finanzas"]')) rFin();
+  if(document.querySelector('.nv.act[data-p="dashboard"]')) rDash();
+  if(document.querySelector('.nv.act[data-p="legal"]')) rLegal();
+
+  // Ofrecer recibo
+  finOfrecerRecibo(pago);
+}
+
+function finOfrecerRecibo(pago){
+  var p = pago.pid ? gP(pago.pid) : null;
+  var c = pago.cid ? gC(pago.cid) : null;
+
+  om('✅ Ingreso registrado',`
+    <div style="text-align:center;padding:16px 0">
+      <div style="font-size:36px;margin-bottom:8px">✅</div>
+      <div style="font-size:22px;font-weight:900;color:var(--green)">${fmt(pago.monto)}</div>
+      <div style="font-size:13px;color:var(--g5);margin-top:4px">${pago.concepto}</div>
+      ${p?'<div style="font-size:12px;color:var(--g4);margin-top:2px">'+p.name+'</div>':''}
+      <div style="font-size:12px;color:var(--g4);margin-top:2px">${pago.fecha} · Folio: ${pago.folio}</div>
+    </div>
+    <div style="background:var(--g1);border-radius:10px;padding:14px;margin-top:4px">
+      <div style="font-size:12px;color:var(--g5);text-align:center">¿Deseas generar el recibo de pago?</div>
+    </div>`,
+    `<button class="btn" onclick="cm()" style="background:var(--g2);color:var(--g5)">No, solo guardar</button>
+     <button class="btn bg" style="background:var(--navy);color:#fff;border:none" onclick="cm();legalImprimirRecibo('${pago.folio}')">🧾 Generar recibo PDF</button>`
+  );
+}
+
+
 function finFabVisible(show){
   document.getElementById('fin-fab').style.display = show ? 'flex' : 'none';
 }
