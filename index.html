@@ -1721,7 +1721,7 @@ function cotDRender(i){
 
   var yaEnObra = !!obra;
 
-  om(ico+' '+q.id+' — '+q.desc, `
+  om(ico+' '+q.id, `
   <!-- HEADER estado + acciones rápidas -->
   <div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:14px">
     <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
@@ -1729,13 +1729,18 @@ function cotDRender(i){
       <span class="bdg bgr">${ico} ${q.tipo||'General'}</span>
       <span class="bdg bgr">V${q.v}</span>
     </div>
-    ${q.status !== 'APROBADA' ? `
     <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       <select onchange="cotDCambiarEstado(${i},this.value)" style="padding:6px 12px;border:1.5px solid var(--g2);border-radius:8px;font-size:13px;font-weight:700;color:var(--navy);background:#fff">
-        ${['BORRADOR','EN REVISIÓN','ENVIADA','EN NEGOCIACIÓN'].map(function(s){ return '<option value="'+s+'"'+(s===q.status?' selected':'')+'>'+s+'</option>'; }).join('')}
+        ${['BORRADOR','EN REVISIÓN','ENVIADA','EN NEGOCIACIÓN','APROBADA','RECHAZADA'].map(function(s){ return '<option value="'+s+'"'+(s===q.status?' selected':'')+'>'+s+'</option>'; }).join('')}
       </select>
-      <button onclick="cotDAprobar(${i})" style="background:#2E7D32;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:800;cursor:pointer">✅ Aprobar</button>
-    </div>` : ''}
+      ${q.status!=='APROBADA'?'<button onclick="cotDAprobar('+i+')" style="background:#2E7D32;color:#fff;border:none;border-radius:8px;padding:8px 16px;font-size:13px;font-weight:800;cursor:pointer">✅ Aprobar</button>':''}
+    </div>
+  </div>
+
+  <!-- DESCRIPCIÓN editable -->
+  <div style="margin-bottom:12px">
+    <div class="fl">Descripción / alcance</div>
+    <textarea onblur="cotDEditCampo(${i},'desc',this.value)" style="width:100%;border:1.5px solid var(--g2);border-radius:8px;padding:8px 10px;font-size:13px;resize:vertical;min-height:52px;outline:none;font-family:inherit">${q.desc||''}</textarea>
   </div>
 
   <!-- INFO BÁSICA -->
@@ -1762,10 +1767,10 @@ function cotDRender(i){
     <button onclick="cm();window._obraActiva='${obra.id}';window._obraTab='resumen';goTo('obras')" style="background:var(--gold);color:#fff;border:none;border-radius:8px;padding:8px 14px;font-size:12px;font-weight:700;cursor:pointer">Ver obra →</button>
   </div>` : ''}
 
-  <!-- PARTIDAS — editables -->
-  <div style="font-size:11px;font-weight:800;color:var(--g4);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">
-    Partidas (${partidas.length}) 
-    ${q.status!=='APROBADA' ? '<button onclick="cotDAgregarPartida('+i+')" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer;margin-left:8px">+ Agregar</button>' : ''}
+  <!-- PARTIDAS — siempre editables -->
+  <div style="font-size:11px;font-weight:800;color:var(--g4);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px;display:flex;align-items:center;gap:8px">
+    <span>Partidas (${partidas.length})</span>
+    <button onclick="cotDAgregarPartida(${i})" style="background:var(--navy);color:#fff;border:none;border-radius:6px;padding:3px 10px;font-size:11px;cursor:pointer">+ Agregar</button>
   </div>
   ${partidas.length ? `
   <div style="overflow-x:auto;margin-bottom:12px;border:1px solid var(--g2);border-radius:8px">
@@ -1777,63 +1782,115 @@ function cotDRender(i){
         <th style="padding:8px 8px;text-align:right;font-size:10px;color:var(--g4);font-weight:700;width:55px">CANT.</th>
         <th style="padding:8px 8px;text-align:right;font-size:10px;color:var(--g4);font-weight:700;width:90px">P.U.</th>
         <th style="padding:8px 8px;text-align:right;font-size:10px;color:var(--g4);font-weight:700;width:100px">SUBTOTAL</th>
-        ${q.status!=='APROBADA' ? '<th style="padding:8px 6px;width:28px"></th>' : ''}
+        <th style="padding:8px 6px;width:28px"></th>
       </tr></thead>
       <tbody>
         ${partidas.map(function(p,pi){ 
           var sub_p = p.sub || (p.cant*(p.pu||0));
           return '<tr style="border-top:1px solid var(--g1)">'
             +'<td style="padding:7px 10px;font-size:12px;color:var(--g5)">'
-              +(q.status!=='APROBADA'
-                ? '<input value="'+(p.nom||p.concepto||'').replace(/"/g,"'")+'" onblur="cotDEditPartida('+i+','+pi+',\'nom\',this.value)" style="width:100%;border:none;background:transparent;font-size:12px;font-weight:600;color:var(--navy);outline:none;min-width:150px">'
-                : '<span style="font-weight:600;color:var(--navy)">'+(p.nom||p.concepto||'—')+'</span>')
+              +'<input value="'+(p.nom||p.concepto||'').replace(/"/g,"'")+'" onblur="cotDEditPartida('+i+','+pi+',\'nom\',this.value)" style="width:100%;border:none;background:transparent;font-size:12px;font-weight:600;color:var(--navy);outline:none;min-width:150px">'
             +'</td>'
             +'<td style="padding:7px 8px;font-size:11px;color:var(--g4)">'+(p.cat||'—')+'</td>'
             +'<td style="padding:7px 8px;text-align:center;font-size:11px">'+(p.uni||p.unidad||'—')+'</td>'
             +'<td style="padding:7px 8px;text-align:right">'
-              +(q.status!=='APROBADA'
-                ? '<input type="number" value="'+(p.cant||1)+'" onblur="cotDEditPartida('+i+','+pi+',\'cant\',this.value)" style="width:48px;border:1px solid var(--g2);border-radius:4px;padding:3px 5px;font-size:11px;text-align:right">'
-                : (p.cant||1))
+              +'<input type="number" value="'+(p.cant||1)+'" onblur="cotDEditPartida('+i+','+pi+',\'cant\',this.value)" style="width:48px;border:1px solid var(--g2);border-radius:4px;padding:3px 5px;font-size:11px;text-align:right">'
             +'</td>'
             +'<td style="padding:7px 8px;text-align:right">'
-              +(q.status!=='APROBADA'
-                ? '<input type="number" value="'+(p.pu||0)+'" onblur="cotDEditPartida('+i+','+pi+',\'pu\',this.value)" style="width:80px;border:1px solid var(--g2);border-radius:4px;padding:3px 5px;font-size:11px;text-align:right">'
-                : fmt(p.pu||0))
+              +'<input type="number" value="'+(p.pu||0)+'" onblur="cotDEditPartida('+i+','+pi+',\'pu\',this.value)" style="width:80px;border:1px solid var(--g2);border-radius:4px;padding:3px 5px;font-size:11px;text-align:right">'
             +'</td>'
             +'<td style="padding:7px 8px;text-align:right;font-weight:700;color:var(--navy)">'+fmt(sub_p)+'</td>'
-            +(q.status!=='APROBADA' ? '<td style="padding:7px 4px;text-align:center"><button onclick="cotDElimPartida('+i+','+pi+')" style="background:none;border:none;cursor:pointer;color:var(--g3);font-size:14px;line-height:1">✕</button></td>' : '')
+            +'<td style="padding:7px 4px;text-align:center"><button onclick="cotDElimPartida('+i+','+pi+')" style="background:none;border:none;cursor:pointer;color:var(--g3);font-size:14px;line-height:1">✕</button></td>'
           +'</tr>';
         }).join('')}
       </tbody>
     </table>
   </div>` : `
   <div style="background:var(--g1);border-radius:8px;padding:20px;text-align:center;color:var(--g4);margin-bottom:12px">
-    Sin partidas. ${q.status!=='APROBADA'?'<button onclick="cotDAgregarPartida('+i+')" class="btn bp bsm" style="margin-left:8px">+ Agregar partida</button>':''}
+    Sin partidas. <button onclick="cotDAgregarPartida(${i})" class="btn bp bsm" style="margin-left:8px">+ Agregar partida</button>
   </div>`}
 
-  <!-- TOTALES -->
-  <div style="background:var(--navy);border-radius:10px;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px">
-    <div style="color:rgba(255,255,255,.7);font-size:12px">
-      Subtotal ${fmt(sub)} ${q.iva?'+ IVA 16% ('+fmt(iva)+')':'(sin IVA)'}
+  <!-- TOTALES + edición de condiciones -->
+  <div style="background:var(--navy);border-radius:10px;padding:14px 16px;margin-bottom:10px">
+    <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;margin-bottom:10px">
+      <div style="color:rgba(255,255,255,.7);font-size:12px">
+        Subtotal ${fmt(sub)} ${q.iva?'+ IVA 16% ('+fmt(iva)+')':'(sin IVA)'}
+        <label style="display:flex;align-items:center;gap:5px;margin-top:4px;cursor:pointer">
+          <input type="checkbox" ${q.iva?'checked':''} onchange="cotDEditCampo(${i},'iva',this.checked)" style="width:14px;height:14px">
+          <span style="font-size:11px;color:rgba(255,255,255,.6)">Incluir IVA 16%</span>
+        </label>
+      </div>
+      <div>
+        <div style="font-size:10px;color:rgba(255,255,255,.5);text-align:right;margin-bottom:3px">TOTAL</div>
+        <div style="display:flex;align-items:center;gap:6px">
+          <span style="color:rgba(255,255,255,.6);font-size:18px;font-weight:700">$</span>
+          <input type="number" value="${total}"
+            onblur="cotDEditTotal(${i},this.value)"
+            style="background:transparent;border:none;border-bottom:2px solid var(--gold);color:var(--gold);font-size:22px;font-weight:900;width:140px;text-align:right;outline:none;-moz-appearance:textfield"
+            title="Editar total directamente">
+        </div>
+        ${partidas.length?'<div style="font-size:10px;color:rgba(255,255,255,.4);text-align:right;margin-top:2px">calculado de partidas: '+fmt(sub+iva)+'</div>':''}
+      </div>
     </div>
-    <div style="font-size:22px;font-weight:900;color:var(--gold)">TOTAL ${fmt(total)}</div>
+    <div>
+      <div style="font-size:10px;color:rgba(255,255,255,.5);margin-bottom:4px">💳 CONDICIONES DE PAGO</div>
+      <input value="${q.condPago||''}" placeholder="ej. 30% anticipo · 40% avance · 30% entrega"
+        onblur="cotDEditCampo(${i},'condPago',this.value)"
+        style="width:100%;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);border-radius:6px;padding:7px 10px;font-size:12px;color:#fff;outline:none">
+    </div>
   </div>
-  ${q.condPago ? `<div style="font-size:12px;color:var(--g4);margin-top:8px;padding:0 2px">💳 <strong>Pago:</strong> ${q.condPago}</div>` : ''}
+  <!-- Margen -->
+  <div style="display:flex;gap:10px;align-items:center;margin-bottom:6px">
+    <span style="font-size:12px;color:var(--g4)">Margen objetivo:</span>
+    <input type="number" value="${q.margin||0}" min="0" max="60"
+      onblur="cotDEditCampo(${i},'margin',parseFloat(this.value)||0)"
+      style="width:60px;border:1px solid var(--g2);border-radius:6px;padding:4px 8px;font-size:12px;font-weight:700;color:var(--navy);text-align:center;outline:none">
+    <span style="font-size:12px;color:var(--g4)">%</span>
+  </div>
   `,
 
-  // FOOTER
+  // FOOTER — siempre editable
   `<button class="btn bo" onclick="cm()">← Cerrar</button>
    <button class="btn bo" onclick="pdfCot(${i})">📥 PDF</button>
-   ${q.status!=='APROBADA' ? `
    <button class="btn bp" onclick="cotDGuardar(${i})">💾 Guardar cambios</button>
-   <button class="btn bg" onclick="cotDAprobar(${i})" style="font-size:14px;padding:10px 20px">✅ Aprobar cotización</button>
-   ` : `
-   <button class="btn bp" onclick="cm();cotDCrearProyectoYObra(${i})">🏗️ Crear proyecto + obra</button>
-   `}`
+   ${q.status!=='APROBADA'?'<button class="btn bg" onclick="cotDAprobar('+i+')" style="font-size:14px;padding:10px 20px">✅ Aprobar</button>':'<button class="btn bp" onclick="cm();cotDCrearProyectoYObra('+i+')" style="background:var(--green);border:none">🏗️ Crear obra</button>'}`
   );
 }
 
 // ── Edición inline de partidas ────────────────────────────────────────────────
+// ─── Edición inline de campos generales de cotización ────────────────────────
+function cotDEditCampo(i, campo, valor){
+  var q = DB.quotations[i]; if(!q) return;
+  if(campo==='desc')     q.desc = valor;
+  else if(campo==='condPago') q.condPago = valor;
+  else if(campo==='margin')   q.margin = parseFloat(valor)||0;
+  else if(campo==='iva')      { q.iva = !!valor; cotDRender(i); }
+  saveToStorage();
+}
+
+function cotDEditTotal(i, valor){
+  var q = DB.quotations[i]; if(!q) return;
+  var v = parseFloat(valor)||0;
+  if(v <= 0) return;
+  q.total = Math.round(v);
+  // Si tiene partidas, ajustar el P.U. de la última para que cuadre (proporcional)
+  if(q.partidas && q.partidas.length){
+    var subActual = q.partidas.reduce(function(s,p){ return s+(p.cant*(p.pu||0)); },0);
+    var targetSub = q.iva ? Math.round(v/1.16) : v;
+    if(subActual > 0){
+      var factor = targetSub / subActual;
+      q.partidas.forEach(function(p){
+        p.pu = Math.round((p.pu||0)*factor);
+        p.sub = Math.round(p.cant * p.pu);
+      });
+    }
+  }
+  saveToStorage();
+  cotDRender(i);
+  toast('✅ Total actualizado — partidas ajustadas proporcionalmente');
+}
+
+
 function cotDEditPartida(i, pi, campo, val){
   var q = DB.quotations[i]; if(!q||!q.partidas) return;
   var p = q.partidas[pi]; if(!p) return;
@@ -1906,15 +1963,23 @@ function cotDGuardarPartida(i){
 }
 
 function cotDGuardar(i){
-  // Recalcular totales antes de guardar
   var q = DB.quotations[i]; if(!q) return;
-  if(q.partidas&&q.partidas.length){
-    var sub = q.partidas.reduce(function(s,p){ return s+(p.sub||p.cant*p.pu||0); }, 0);
-    q.total = Math.round(sub * (q.iva ? 1.16 : 1));
-    q.v = (q.v||1);
+  // Recalcular total desde partidas
+  if(q.partidas && q.partidas.length){
+    var sub2 = q.partidas.reduce(function(s,p){ return s+((p.cant||1)*(p.pu||0)); }, 0);
+    q.partidas.forEach(function(p){ p.sub = Math.round((p.cant||1)*(p.pu||0)); });
+    q.total = Math.round(sub2 * (q.iva ? 1.16 : 1));
+  }
+  // Actualizar proyecto y obra si existen
+  if(q.pid){
+    var pj = gP(q.pid);
+    if(pj){ pj.cont = q.total; pj.cot = q.total; }
+    var obra = DB.works.find(function(w){ return w.pid===q.pid; });
+    if(obra) obra.budget = q.total;
   }
   saveToStorage();
-  toast('✅ Cotización guardada');
+  cotDRender(i);
+  toast('✅ Cotización guardada · Total: '+fmt(q.total));
 }
 
 function cotDCambiarEstado(i, val){
