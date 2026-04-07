@@ -4819,7 +4819,6 @@ var _persModal = null;
 var _persEditing = null;
 
 function rPersonal(){
-  var user = DB.users.find(u=>u.id===CUR_USER);
   var obras = DB.works || [];
   var personal = DB.personal || [];
 
@@ -4854,7 +4853,7 @@ function rPersonal(){
   </div>
 
   <!-- KPIs -->
-  <div class="g4c" id="pers-kpis" style="gap:10px"></div>
+  <div id="pers-kpis" style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px"></div>
 
   <!-- TABLA -->
   <div class="card" style="padding:0;overflow:hidden">
