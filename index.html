@@ -1595,7 +1595,7 @@ function rFin(){
 }
 
 // ── Helpers finanzas ─────────────────────────────────────────────────────────
-var _finFiltros = {tipo:'todos', pid:'', cat:'', q:''};
+var _finFiltros = {tipo:'todos', pid:'', cat:'', sid:'', q:''};
 
 function finRenderMovs(){
   var f = _finFiltros;
@@ -1613,6 +1613,7 @@ function finRenderMovs(){
   if(f.tipo !== 'todos') movs = movs.filter(m=>m.tipo===f.tipo);
   if(f.pid)  movs = movs.filter(m=>m.pid===f.pid);
   if(f.cat)  movs = movs.filter(m=>m.concepto===f.cat||m.cat===f.cat);
+  if(f.sid)  movs = movs.filter(m=>String(m.sid)===String(f.sid));
   if(f.q)    movs = movs.filter(m=>(m.concepto+' '+(gP(m.pid)?gP(m.pid).name:'')).toLowerCase().includes(f.q.toLowerCase()));
   // Ordenar más reciente primero
   movs.sort((a,b)=>b.fecha.localeCompare(a.fecha));
@@ -1690,8 +1691,15 @@ function finRenderMovs(){
         <optgroup label="Ingresos">${ingCats.map(c=>`<option value="${c}" ${f.cat===c?'selected':''}>${c}</option>`).join('')}</optgroup>
       </select>
 
+      <!-- Proveedor -->
+      <select style="padding:8px 10px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px;background:#fff;outline:none;min-width:140px"
+        onchange="finFiltrar('sid',this.value)">
+        <option value="">Todos los proveedores</option>
+        ${DB.suppliers.map(s=>`<option value="${s.id}" ${String(f.sid)===String(s.id)?'selected':''}>${s.name}</option>`).join('')}
+      </select>
+
       <!-- Limpiar -->
-      ${(f.tipo!=='todos'||f.pid||f.cat||f.q)?`
+      ${(f.tipo!=='todos'||f.pid||f.cat||f.sid||f.q)?`
         <button onclick="finLimpiarFiltros()"
           style="padding:8px 12px;border:1.5px solid var(--g2);border-radius:8px;font-size:12px;color:var(--g4);cursor:pointer;background:#fff;font-weight:600">
           ✕ Limpiar
@@ -1771,7 +1779,7 @@ function finFiltrar(key, val){
 }
 
 function finLimpiarFiltros(){
-  _finFiltros = {tipo:'todos', pid:'', cat:'', q:''};
+  _finFiltros = {tipo:'todos', pid:'', cat:'', sid:'', q:''};
   finRenderMovs();
 }
 
