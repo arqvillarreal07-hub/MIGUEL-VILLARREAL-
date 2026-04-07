@@ -1964,23 +1964,62 @@ function saveOC(){
 // ══════════════════════════════════════
 // PROVEEDORES
 // ══════════════════════════════════════
+function provGetEstatus(sid){
+  var ocs = DB.purchases.filter(o=>o.sid===sid);
+  if(!ocs.length) return {lbl:'Sin órdenes', cls:'bgr', saldo:0};
+  var pendiente = ocs.filter(o=>!o.paid).reduce((s,o)=>s+o.amount,0);
+  var vencidas  = ocs.filter(o=>!o.paid && o.del && o.del < today()).length;
+  if(vencidas>0)  return {lbl:'En mora',   cls:'brd', saldo:pendiente};
+  if(pendiente>0) return {lbl:'Por pagar', cls:'bam', saldo:pendiente};
+  return {lbl:'Al corriente', cls:'bgrn', saldo:0};
+}
+
 function rProv(){
+  var totalPend = DB.suppliers.reduce((s,sup)=>{
+    return s + DB.purchases.filter(o=>o.sid===sup.id&&!o.paid).reduce((a,o)=>a+o.amount,0);
+  },0);
+
   $('MN').innerHTML=`
   <div class="ph3">
     <div><div class="pt">Proveedores</div><div class="ps">${DB.suppliers.length} proveedores registrados</div></div>
     <button class="btn bp" onclick="openNewSup()">+ Nuevo proveedor</button>
   </div>
+
+  <!-- KPIs -->
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:11px">
+    <div class="kc"><div class="kl">Proveedores</div><div class="kv">${DB.suppliers.length}</div><div class="kd">registrados</div></div>
+    <div class="kc"><div class="kl">Saldo pendiente</div><div class="kv amb">${fK(totalPend)}</div><div class="kd">por pagar</div></div>
+    <div class="kc"><div class="kl">En mora</div><div class="kv rd">${DB.suppliers.filter(s=>provGetEstatus(s.id).lbl==='En mora').length}</div><div class="kd">órdenes vencidas</div></div>
+    <div class="kc"><div class="kl">Al corriente</div><div class="kv grn">${DB.suppliers.filter(s=>provGetEstatus(s.id).lbl==='Al corriente').length}</div><div class="kd">sin deuda</div></div>
+  </div>
+
   <div class="card" style="padding:0">
     <div class="tw"><table>
-      <thead><tr><th>Proveedor</th><th>Categoría</th><th>Contacto</th><th>Condiciones</th><th>Calificación</th><th>Compras</th></tr></thead>
-      <tbody>${DB.suppliers.map(s=>`<tr>
-        <td><div style="font-weight:700">${s.name}</div><div class="sub">${s.email}</div></td>
-        <td><span class="bdg bbl">${s.cat}</span></td>
-        <td><div>${s.contact}</div><div class="sub">${s.phone}</div></td>
-        <td style="font-size:12px">${s.terms}</td>
-        <td style="font-size:15px">${'⭐'.repeat(s.rating)}${'☆'.repeat(5-s.rating)}</td>
-        <td><span class="amt gd">${fK(s.total)}</span></td>
-      </tr>`).join('')}</tbody>
+      <thead><tr>
+        <th>Proveedor</th>
+        <th>Categoría</th>
+        <th>Contacto</th>
+        <th>Condiciones</th>
+        <th>Estatus</th>
+        <th style="text-align:right">Saldo pendiente</th>
+        <th style="text-align:right">Total compras</th>
+        <th>Cal.</th>
+      </tr></thead>
+      <tbody>${DB.suppliers.map(s=>{
+        var est = provGetEstatus(s.id);
+        return `<tr>
+          <td><div style="font-weight:700">${s.name}</div><div class="sub">${s.email}</div></td>
+          <td><span class="bdg bbl">${s.cat}</span></td>
+          <td><div>${s.contact}</div><div class="sub">${s.phone}</div></td>
+          <td style="font-size:12px">${s.terms}</td>
+          <td><span class="bdg ${est.cls}">${est.lbl}</span></td>
+          <td style="text-align:right;font-weight:700;color:${est.saldo>0?'var(--red)':'var(--g4)'}">
+            ${est.saldo>0?fmt(est.saldo):'—'}
+          </td>
+          <td style="text-align:right">${fK(s.total)}</td>
+          <td style="font-size:13px">${'⭐'.repeat(s.rating)}${'☆'.repeat(5-s.rating)}</td>
+        </tr>`;
+      }).join('')}</tbody>
     </table></div>
   </div>`;
 }
